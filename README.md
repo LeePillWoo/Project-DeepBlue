@@ -1,16 +1,33 @@
-# Project Deep Blue — 플레이어블 프로토타입
+# Project Deep Blue
 
-기획서(`docs/gemini-code-1794302900744.html`)의 **선상 낚시 + 해저 작살** 듀얼 코어를 풀 3D(WebGL2)로 구현한 프로토타입입니다.
+크롬에서 바로 실행되는 **풀 3D 선상 낚시 · 보트 운전 · 해저 작살** 게임입니다. 설치·빌드·서버 없이 브라우저만 있으면 됩니다.
 
-## 실행
+### ▶ [지금 플레이하기](https://leepillwoo.github.io/Project-DeepBlue/)
 
-Chrome에서 `index.html`을 더블클릭하면 됩니다. 설치·빌드·로컬 서버가 필요 없고 오프라인에서도 동작합니다.
+데스크톱 Chrome, 키보드와 마우스 기준입니다. 처음 접속 때 약 40 MB를 받고, 로딩은 10~15초쯤 걸립니다.
 
-### 웹 데모
+| 선상 낚시 | 보트 운전 |
+|---|---|
+| ![선상 낚시와 크루](docs/images/fishing.jpg) | ![파도를 가르는 보트](docs/images/helm.jpg) |
+| **해적섬과 범선** | **해저 작살·관찰** |
+| ![해적섬과 범선](docs/images/island.jpg) | ![바다거북과 리프](docs/images/dive.jpg) |
 
-설치 없이 링크로 플레이: <https://claude.ai/artifact/9ZbodPksXTbaNLW21sUGp8> (claude.ai Artifact, 기본 비공개 — 다른 사람에게 보여주려면 페이지의 Share 메뉴에서 공유)
+## 주요 기능
 
-게임을 고친 뒤 갱신하려면 `node tools/build_demo.mjs` 로 `demo/project-deep-blue.html` 과 `demo/files.json`(함께 올릴 파일 목록)을 다시 만들고 같은 주소로 다시 게시합니다. 웹 페이지는 `index.html` 에서 문서 껍데기만 떼고 three.js 를 cdnjs 에서 받도록 바꾼 것이라 게임 내용은 로컬과 같습니다.
+- **낚시**: 캐스팅 파워, 텐션·드랙 파이팅, 줄이 끊긴 대어를 다이빙해서 추적
+- **운전**: 선체 5개 지점의 부력을 파도에서 직접 계산 — 맞파도에서는 뜨고 떨어지며 물보라
+- **작살**: 2차 항력 탄도, 조준 보정, 물고기·상어·해파리 AI, 문어와 바다거북, 채집물과 보물상자
+- **바다**: 해적섬·등대·범선, 어부가 탄 어선, 트롤선, 갈매기, 미니맵
+- **도감**: 17종, 종별 기록과 찾는 법 힌트 (브라우저에 저장)
+- **사운드**: 효과음 37종 전부 WebAudio 합성(샘플 파일 없음)
+
+## 로컬에서 실행
+
+저장소를 받아 `index.html`을 Chrome으로 더블클릭하면 됩니다. 오프라인에서도 동작합니다.
+
+GitHub Pages(위 링크)는 `main` 브랜치를 그대로 띄우므로, 푸시하면 1~2분 안에 반영됩니다.
+
+기획서 원본은 `docs/gemini-code-1794302900744.html`에 있습니다.
 
 ## 조작
 
@@ -49,7 +66,7 @@ tools/                  개발용 — 게임 실행에는 필요 없음
   blender_prep.py         무거운 GLB 데시메이트 (Blender CLI)
   fab/                    Fab 무료 에셋 검색·다운로드 (로그인된 크롬 사용)
   dev/                    헤드리스 검증 하네스, GLB 뷰어, 팩 뷰어
-  build_demo.mjs          웹 데모 페이지(demo/) 생성
+  build_demo.mjs          claude.ai Artifact 용 데모 페이지(demo/) 생성 — GitHub Pages 에는 필요 없음
 raw/fab, raw/prep       원본·중간 GLB (게임 실행에는 필요 없음, 약 1.2 GB — 지워도 됩니다)
 docs/                   기획서 원본
 ```
