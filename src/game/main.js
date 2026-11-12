@@ -45,7 +45,7 @@
     await step(0.24, '하늘과 구름 생성 중…', () => { DB.Env.init(renderer); DB.Env.onEnvMap = (t) => { scene.environment = t; }; });
     await step(0.33, '바다 생성 중…', () => { DB.Ocean.init(renderer, DB.Env); DB.Post.init(renderer); scene.add(DB.Env.dome, DB.Ocean.group); });
     await step(0.43, '보트 건조 중…', () => { DB.Boat.init(scene, DB.Env); DB.FX.init(scene); });
-    await step(0.5, '섬과 다른 배들 띄우는 중…', () => { DB.Sea.init(scene); DB.Boat.colliders = DB.Sea.colliders; DB.Crew.init(); });
+    await step(0.5, '섬과 다른 배들 띄우는 중…', () => { DB.Sea.init(scene); DB.Boat.colliders = DB.Sea.colliders; DB.Crew.init(); DB.Weather.init(scene); });
     await step(0.58, '낚시 장비 준비 중…', () => { DB.Fishing.init(scene, camera); for (const k of ['marlin', 'sailfish', 'tuna', 'mahi', 'amberjack', 'seabream', 'grouper']) DB.Fish.get(k); });
     await step(0.68, '산호초와 난파선 배치 중…', () => DB.Reef.init(scene));
     await step(0.8, '수중 생물 풀어놓는 중…', () => { DB.Dive.init(scene, camera); DB.Wild.init(scene); });
@@ -189,6 +189,14 @@
     on('escaped', () => UI.toast('놓친 대어가 깊은 바다로 사라졌습니다', 'warn'));
     on('ink', () => A.play('ink'));
     on('protected', (key) => UI.toast(key === 'turtle' ? '바다거북은 보호종입니다 — 작살이 등딱지에 튕겨 나갔습니다' : `${eun(name(key))} 보호종입니다 — 작살을 거뒀습니다`, 'warn', 4));
+    // weather
+    on('weather', (s) => {
+      if (s === 'build') UI.toast('수평선에서 먹구름이 몰려옵니다 — 폭풍이 다가옵니다', 'warn', 6);
+      else if (s === 'storm') UI.toast('폭풍 한가운데입니다 — 이런 날에만 무는 대물이 있습니다 (황새치 · GT · 돗돔)', 'bad', 7);
+      else if (s === 'clearing') UI.toast('비가 잦아들고 구름이 걷히기 시작합니다', '', 5);
+      else UI.toast('폭풍이 지나갔습니다', 'good', 4);
+    });
+    on('thunder', (d) => { A.play('thunder', { d: d.d, delay: d.d / 340 }); if (d.d < 420) G.shake = Math.max(G.shake, 0.25); });
     // the big ones passing through
     on('wildBlow', (d) => {
       if (d.under) { if (d.first) A.play('whale'); return; }
@@ -285,6 +293,7 @@
         if (Input.pressed('KeyE')) setDrive(true);
       }
       G.fade = M.damp(G.fade, 0, 2.2, dt);
+      if (Input.pressed('KeyR')) DB.Weather.toggle();
       if (Input.pressed('KeyT') && F.state !== 'trophy') {
         const n = TODS[(TODS.indexOf(DB.Env.tod) + 1) % TODS.length];
         DB.Env.setTimeOfDay(n); DB.Ocean.syncLight(); B.syncLight(); UI.toast('시간대: ' + DB.Env.TOD[n].label);
@@ -311,21 +320,23 @@
     G.fovT = zoom ? (G.under ? 46 : 30) : 62 + (G.under && D.sprint ? 5 : 0) + G.dK * M.sat(sp / 14) * 13;
     const fov = M.damp(camera.fov, G.fovT, 9, dt);
     if (Math.abs(fov - camera.fov) > 0.01) { camera.fov = fov; camera.updateProjectionMatrix(); }
+    const Wx = DB.Weather; Wx.update(dt, camera, G.under, (G.state === 'boat' || G.state === 'dive') && !G.trans && dt > 0);
     DB.Env.update(dt, camera);
     DB.Ocean.update(dt, camera, G.under);
     if (G.under) DB.Reef.update(dt, camera);
     // screen effects
     G.flash = M.damp(G.flash, 0, G.under ? 2.2 : 3.5, dt); G.wet = Math.max(G.wet - dt / 7, 0); G.damage = Math.max(G.damage - dt * 0.9, 0);
+    if (G.state !== 'title') G.wet = Math.max(G.wet, Wx.rain * 0.5);      // rain keeps the lens beaded
     fx.flash = G.flash; fx.wet = G.under ? 0 : G.wet; fx.damage = G.damage;
     // red at the edges while something dangerous is close; it throbs, faster once a shark commits
     G.danger = M.damp(G.danger, G.state === 'dive' ? D.danger : 0, 3, dt);
     fx.danger = G.danger * (0.8 + 0.2 * Math.sin(G.time * (D.danger >= 1 ? 13 : 5)));
     if (G.under) {
       const low = D.o2 < 0.22 ? 1 - D.o2 / 0.22 : 0, narc = M.sat((D.depth - D.maxDepth) / 8);
-      fx.exposure = 1.35 + Math.min(D.depth, 32) * 0.085;      // eyes adapt as the light fades with depth
+      fx.exposure = (1.35 + Math.min(D.depth, 32) * 0.085) * (1 + 0.7 * Wx.k) * (1 + 1.3 * Wx.flash);      // eyes adapt as the light fades with depth (and under a storm)
       fx.vignette = 0.46; fx.bloom = 0.075; fx.ca = 0.007 + narc * 0.03;
       fx.dark = Math.min(low * 0.75 + (D.blackout > 0 ? D.blackout / 3 : 0), 1); fx.sat = 1.03 - narc * 0.6; fx.fade = D.blackout > 0 ? M.sat(D.blackout / 3) : 0;
-    } else { fx.exposure = DB.Env.exposure; fx.vignette = 0.22; fx.bloom = 0.05; fx.ca = 0.004; fx.dark = 0; fx.sat = 1.04; fx.fade = G.fade; }
+    } else { fx.exposure = DB.Env.exposure * (1 + 0.7 * Wx.k) * (1 + 1.3 * Wx.flash); fx.vignette = 0.22 + 0.1 * Wx.k; fx.bloom = 0.05; fx.ca = 0.004; fx.dark = 0; fx.sat = 1.04 - 0.22 * Wx.k; fx.fade = G.fade; }
     // hud
     const bp = B.group.position;
     if (G.state === 'boat') {
@@ -342,7 +353,7 @@
     DB.Audio.update(dt, {
       reel: F.state === 'wait' && Input.mouse(0) ? 0.6 : F.state === 'fight' && Input.mouse(0) ? 1 : 0,
       out: f && f.mode === 'run' && F.state === 'fight' ? 3 + 5 * f.sp.power : F.state === 'cast' ? 6 : 0,
-      tension: F.state === 'fight' ? F.tension : 0, shark: G.state === 'dive' ? D.sharkNear : 0, o2: G.state === 'dive' ? D.o2 : 1,
+      tension: F.state === 'fight' ? F.tension : 0, shark: G.state === 'dive' ? D.sharkNear : 0, o2: G.state === 'dive' ? D.o2 : 1, rain: Wx.rain, storm: Wx.k,
       engine: B.mode !== 'anchor' && G.state !== 'title' ? 1 : 0, thr: B.throttle, spd: boat ? B.speed * (B.mode === 'anchor' ? 0 : 1) : 0, air: B.air > 0.1,
       gull: boat ? Sea.nearestGull(camera.position.x, camera.position.y, camera.position.z) : 1e9, buoy, ship: dOf('ship'), trawler: dOf('trawler'), excited: Sea.excited > 0, swim: G.state === 'dive' ? D.vel.length() : 0,
     });
@@ -387,6 +398,7 @@
     // put the boat somewhere (anchored), optionally with a heading
     tp(x, z, h) { const B = DB.Boat; B.group.position.x = x; B.group.position.z = z; if (h !== undefined) B.heading = h; B.u = B.vs = B.yawRate = 0; if (B.mode !== 'drive') B.dropAnchor(); G.dCam.h = B.heading; },
     dex() { return DB.Dex.toggle(); },
+    storm(k = 1) { DB.Weather.set(k); return DB.Weather.state; },      // weather straight to a strength: 1 = full storm, 0 = clear
     wild(key) { return !!DB.Wild.start(key, camera, G.under); },      // send the orcas ('orca') or the sperm whale ('spermWhale') past right now
     hook(key) { const F = DB.Fishing; if (F.state === 'idle') { F.lurePos.copy(F.tip).add(v1.set(-28, 0, 34)); F.lurePos.y = 0; } F.hook(key); },
     step(n, dt = 1 / 60) { for (let i = 0; i < n; i++) tick(dt); },
@@ -395,6 +407,7 @@
 
   // ?selftest — the fight under three reel policies, the spear's range, the boat under power, a speared fish, every sound
   async function selftest() {
+    DB.Weather.auto = false;      // fair weather for the checks: the storm has its own, below
     const F = DB.Fishing, B = DB.Boat, D = DB.Dive, res = [], check = (name, ok, info) => { res.push({ name, ok, info }); console.log(`[selftest] ${ok ? 'PASS' : 'FAIL'} ${name} — ${info}`); };
     const fight = (policy, maxT, setup) => {
       if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard();
@@ -519,12 +532,25 @@
       DB.debug.view = null;
       check('humpback breaches beside the boat', brs.join() === 'out,in' && apex > 1.8 && apex < 4 && logged === 'humpback', `events ${brs.join('→') || 'none'}, body centre peaked ${apex.toFixed(1)} m above the sea, logged ${logged}`);
     }
+    // --- a storm: rough sea the boat rides out at anchor, rain, lightning with thunder, its own fish; and the light comes back afterwards
+    {
+      const Wx = DB.Weather, E = DB.Env, sun0 = E.sunColor.r, sea0 = DB.Ocean.sea; let thunder = 0, tiltS = 0; DB.on('thunder', () => thunder++);
+      DB.debug.storm(1);
+      for (let i = 0; i < 60 * 30; i++) { tick(1 / 60); tiltS = Math.max(tiltS, Math.abs(B.pitch), Math.abs(B.roll)); }
+      const picks = new Set(); F.count = 5; for (let i = 0; i < 40; i++) picks.add(F.pickSpecies(0, 0)).add(F.pickSpecies(-400, 300));
+      const stormOk = DB.Ocean.sea > sea0 * 1.5 && E.sunColor.r < sun0 * 0.1 && Wx.rainMesh.visible && thunder >= 2 && tiltS < 0.6 && ['swordfish', 'gt', 'jewfish'].every((k) => picks.has(k));
+      const info = `sea ×${(DB.Ocean.sea / sea0).toFixed(2)}, sun ×${(E.sunColor.r / sun0).toFixed(2)}, rain ${Wx.rainMesh.visible}, ${thunder} strikes in 30 s, max tilt ${((tiltS * 180) / Math.PI).toFixed(0)}°, bites ${[...picks].join('/')}`;
+      DB.debug.storm(0); tick(1 / 60);
+      check('storm: rough sea, rain, lightning, its own fish — and the light returns', stormOk && Math.abs(E.sunColor.r - sun0) < 1e-6 && DB.Ocean.sea === sea0 && !Wx.rainMesh.visible, info);
+      F.count = 5;
+    }
     const blank = DB.Dex.list.filter((e) => e.img.length < 3000).map((e) => e.key);
     check(`all ${DB.Dex.list.length} field-guide entries have a portrait`, !blank.length, blank.length ? 'missing: ' + blank.join(', ') : 'ok');
 
     // --- every sound renders (peak level only: nobody is listening)
     const pr = await DB.Audio.probe(), dead = pr.filter((p) => !p.ok);
     check(`all ${pr.length} sounds render non-silent`, pr.length > 30 && !dead.length, dead.length ? 'broken: ' + dead.map((p) => `${p.name}(${p.err || p.peak})`).join(', ') : `quietest ${pr.reduce((m, p) => (p.peak < m.peak ? p : m)).name}`);
+    DB.Weather.auto = !P.has('noweather');
     DB.selftestResult = res;
   }
 

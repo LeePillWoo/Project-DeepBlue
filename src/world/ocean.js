@@ -159,7 +159,7 @@ void main(){
 
   const FRAG_TOP = /* glsl */ `
 ${SURF_COMMON}
-uniform float uHaze;
+uniform float uHaze, uRain;
 void main(){
   vec3 toCam = cameraPosition - vWorld; float dist = length(toCam); vec3 V = toCam / dist;
   float foot = max(length(dFdx(vX0)), length(dFdy(vX0)));
@@ -172,7 +172,7 @@ void main(){
   vec2 sl = s.slope + ds + rs;
   vec3 N = normalize(vec3(-sl.x, 1.0, -sl.y));
 
-  float sigma2 = s.varU + varD + 0.0010;
+  float sigma2 = s.varU + varD + 0.0010 + uRain * 0.006;      // rain roughens the surface
   float sig = sqrt(sigma2);
   float alpha = clamp(sqrt(2.0 * sigma2), 0.05, 0.6);
   float NV = max(dot(N, V), 0.001);
@@ -220,6 +220,10 @@ void main(){
   float foam = smoothstep(1.0 - foamAmt, 1.0 - foamAmt + 0.42, ft) * sat(foamAmt * 4.0);
   vec3 foamCol = (uSunCol * (0.3 + 0.7 * sat(dot(N, uSunDir))) / PI + uAmbCol) * 0.8;
   col = mix(col, foamCol, foam * 0.94);
+  if (uRain > 0.01) {      // each drop throws up a pale ring that is gone by the next frame
+    float rn = texture2D(uFoamTex, vX0 * 0.83 + floor(uTime * 12.0) * vec2(0.37, 0.61)).g;
+    col += foamCol * smoothstep(0.74, 0.92, rn) * uRain * (1.0 - smoothstep(20.0, 110.0, dist)) * 0.55;
+  }
 
   // aerial perspective toward the horizon
   vec3 hz = textureLod(uEnv, normalize(vec3(-V.x, 0.02, -V.z)), 2.5).rgb;
@@ -345,7 +349,7 @@ void main(){
         uSunDir: { value: env.sunDir }, uSunCol: { value: env.sunColor }, uAmbCol: { value: env.ambColor },
         uBodyCol: { value: new T.Vector3() }, uSssCol: { value: new T.Vector3() },
         uBoat: { value: new T.Vector4(0, 0, 0, 0) }, uRipple: { value: [0, 1, 2, 3, 4, 5].map(() => new T.Vector4(0, 0, -100, 0)) },
-        uHaze: { value: 5.5e-5 },
+        uHaze: { value: 5.5e-5 }, uRain: { value: 0 },
       }, this.water));
 
       const geo = this.buildDisc(DB.Q.oceanSeg);

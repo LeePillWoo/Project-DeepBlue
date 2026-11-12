@@ -82,6 +82,13 @@
     pickup: (S, U) => { tone(U, { f: 520, f2: 900, a: 0.004, d: 0.1, g: 0.25 }); for (let i = 0; i < 4; i++) tone(U, { f: 700 + Math.random() * 900, f2: 1500 + Math.random() * 800, a: 0.003, d: 0.04, g: 0.06, delay: 0.06 + Math.random() * 0.25 }); },
     treasure: (S, U, X) => { tone(U, { f: 110, f2: 60, d: 0.25, g: 0.4 }); for (let i = 0; i < 12; i++) tone(X, { f: 2200 + Math.random() * 2600, a: 0.002, d: 0.18 + Math.random() * 0.2, g: 0.05, delay: 0.1 + Math.random() * 0.8 }); },
     ink: (S, U) => noise(U, { f: 520, f2: 140, a: 0.03, d: 0.7, g: 0.3 }),
+    // lightning o.d metres off: a crack when it is close, then the long roll (muffled under water)
+    thunder: (S, U, X, o) => {
+      const d = o.d || 600, k = near(d, 700), dl = o.delay;
+      if (d < 650) noise(S, { type: 'highpass', f: 1700, a: 0.002, d: 0.24, g: 0.55 * k, delay: dl });
+      noise(S, { f: 260, f2: 55, a: 0.04, d: 3.2 + d / 400, g: 0.75 * k + 0.12, delay: dl + 0.03 }); noise(S, { f: 95, f2: 40, a: 0.3, d: 5, g: 0.5 * k + 0.1, delay: dl + 0.6 });
+      tone(S, { f: 52, f2: 30, d: 1.6, g: 0.5 * k, delay: dl }); noise(U, { f: 120, f2: 45, a: 0.1, d: 3.5, g: 0.35 * k + 0.05, delay: dl });
+    },
     whale: (S, U) => { const f = 150 + Math.random() * 90; tone(U, { f, f2: f * 1.9, a: 0.6, d: 1.6, g: 0.05 }); tone(U, { f: f * 1.9, f2: f * 1.25, a: 0.3, d: 1.8, g: 0.045, delay: 1.9 }); },
     dexOpen: (S, U, X) => { tone(X, { f: 660, d: 0.08, g: 0.09 }); tone(X, { f: 990, d: 0.1, g: 0.08, delay: 0.07 }); },
     dexClose: (S, U, X) => { tone(X, { f: 990, d: 0.08, g: 0.08 }); tone(X, { f: 660, d: 0.1, g: 0.08, delay: 0.07 }); },
@@ -103,6 +110,7 @@
       this.sea = loopNoise(surf, 'lowpass', 520, 0.4, 0.2); this.hiss = loopNoise(surf, 'bandpass', 1700, 0.5, 0.035); this.wind = loopNoise(surf, 'bandpass', 380, 0.9, 0.05);
       this.rumble = loopNoise(under, 'lowpass', 150, 0.6, 0.5); this.uwmid = loopNoise(under, 'bandpass', 520, 0.8, 0.04);
       this.rush = loopNoise(surf, 'bandpass', 950, 0.5, 0);      // water tearing past the hull
+      this.rainHi = loopNoise(surf, 'highpass', 2600, 0.5, 0); this.rainLo = loopNoise(surf, 'bandpass', 900, 0.5, 0);      // rain on the sea and on the deck
       // reel clicker: square wave through a resonant band = ratchet / drag scream
       this.reelOsc = ctx.createOscillator(); this.reelOsc.type = 'square'; this.reelOsc.frequency.value = 30;
       const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 900;
@@ -131,7 +139,7 @@
     },
     suspend(on) { if (ctx) (on ? ctx.suspend() : ctx.resume()); },
 
-    // p: { reel, out, tension, shark, o2,  engine (0 off .. 1 running), thr, spd (m/s), air,  gull / buoy / ship / trawler distances (m), excited, swim (m/s) }
+    // p: { reel, out, tension, shark, o2,  engine (0 off .. 1 running), thr, spd (m/s), air,  gull / buoy / ship / trawler distances (m), excited, swim (m/s), rain, storm (0..1) }
     update(dt, p) {
       if (!this.ready) return;
       this.t += dt; const t = now(), spd = p.spd || 0;
@@ -149,7 +157,10 @@
       this.engFlt.frequency.setTargetAtTime(210 + rev * 1500, t, 0.1);
       this.engGain.gain.setTargetAtTime(run * (0.05 + rev * 0.1), t, 0.15); this.engUnder.gain.setTargetAtTime(run * (0.03 + rev * 0.06), t, 0.3);
       this.rush.gn.gain.setTargetAtTime(Math.min(spd * 0.014, 0.2), t, 0.2); this.rush.flt.frequency.setTargetAtTime(700 + spd * 60, t, 0.2);
-      this.wind.gn.gain.setTargetAtTime(0.05 + Math.min(spd * 0.009, 0.12), t, 0.3); this.wind.flt.frequency.setTargetAtTime(380 + spd * 28, t, 0.3);
+      const rain = p.rain || 0, storm = p.storm || 0, gust = 1 + 0.35 * Math.sin(this.t * 0.47) * Math.sin(this.t * 0.19);
+      this.wind.gn.gain.setTargetAtTime(0.05 + Math.min(spd * 0.009, 0.12) + storm * 0.13 * gust, t, 0.3); this.wind.flt.frequency.setTargetAtTime(380 + spd * 28 + storm * 150 * gust, t, 0.3);
+      this.rainHi.gn.gain.setTargetAtTime(rain * 0.085, t, 0.5); this.rainLo.gn.gain.setTargetAtTime(rain * 0.1, t, 0.5);
+      this.uwmid.gn.gain.setTargetAtTime(0.04 + rain * 0.05, t, 0.5);      // the hiss of rain on the surface, heard from below
       if (this.scene === 'boat') {
         this.slapT -= dt;
         if (this.slapT <= 0) { this.slapT = 1.6 + Math.random() * 3.2; noise(surf, { f: 700, f2: 180, d: 0.5, g: 0.16 + Math.random() * 0.12 }); tone(surf, { f: 85, f2: 50, d: 0.2, g: 0.12 }); }

@@ -198,7 +198,9 @@
       this.count++;
       if (this.count === 1 && !DB.params.has('rnd')) return 'marlin';       // the first strike is always the showpiece
       const deep = DB.World.depth(x, z) > 30;
-      const tbl = deep ? [['marlin', 26], ['sailfish', 22], ['tuna', 26], ['mahi', 26]] : [['amberjack', 34], ['seabream', 34], ['grouper', 22], ['mahi', 10]];
+      let tbl = deep ? [['marlin', 26], ['sailfish', 22], ['tuna', 26], ['mahi', 26]] : [['amberjack', 34], ['seabream', 34], ['grouper', 22], ['mahi', 10]];
+      // in a storm the big, stubborn ones come up to feed
+      if (DB.Weather.stormy) tbl = deep ? [['swordfish', 42], ['jewfish', 24], ['tuna', 18], ['marlin', 16]] : [['gt', 48], ['jewfish', 22], ['amberjack', 16], ['grouper', 14]];
       let r = Math.random() * tbl.reduce((a, t) => a + t[1], 0);
       for (const [k, w] of tbl) { if ((r -= w) <= 0) return k; }
       return tbl[0][0];

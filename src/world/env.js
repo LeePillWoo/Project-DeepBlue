@@ -41,7 +41,8 @@ vec3 atmosphere(vec3 rd, vec3 sd){
 uniform int uMode, uFace;
 uniform vec3 uCamRight, uCamUp, uCamFwd; uniform float uTanHalfFov, uAspect;
 uniform vec3 uSunDir, uSunCol, uAmbCol, uSeaCol;
-uniform float uTime, uCoverage, uSteps, uJitter, uCirrus;
+uniform float uTime, uCoverage, uSteps, uJitter, uCirrus, uStorm, uFlash;
+uniform vec3 uFlashDir;
 uniform sampler2D uNoise;
 varying vec2 vUv;
 ${DB.GLSL.common}
@@ -134,6 +135,7 @@ void main(){
     vec3 ad = normalize(vec3(rd.x, max(rd.y, 0.0), rd.z));
     vec3 hd = normalize(vec3(rd.x, max(rd.y, 0.045), rd.z));     // single scattering goes murky at the horizon: clamp
     col = atmosphere(hd, uSunDir);
+    if (uStorm > 0.0) { float l = dot(col, vec3(0.3, 0.55, 0.15)); col = mix(col, vec3(l) * vec3(0.8, 0.88, 1.0), uStorm * 0.85) * mix(1.0, 0.17, uStorm); }      // what shows between storm clouds is slate, not blue
     float mu = dot(ad, uSunDir);
     col += uSunCol * 0.012 * pow(max(mu, 0.0), 900.0);            // tight aureole
     vec4 ci = cirrus(ad);
@@ -143,6 +145,7 @@ void main(){
     vec4 cl = clouds(ad, col, uMode == 0 ? jit : 0.5);
     col = col * cl.a + cl.rgb;
     Tr *= cl.a;
+    col += vec3(0.55, 0.68, 1.0) * uFlash * (0.22 + 5.0 * pow(max(dot(ad, uFlashDir), 0.0), 10.0)) * (1.0 - cl.a * 0.7);      // lightning inside the cloud deck
   }
   gl_FragColor = vec4(col, Tr);
 }
@@ -226,6 +229,7 @@ void main(){
   const Env = (DB.Env = {
     sunDir: new T.Vector3(0, 1, 0), sunColor: new T.Color(), ambColor: new T.Color(), horizonColor: new T.Color(), seaColor: new T.Color(0.01, 0.035, 0.07),
     exposure: 0.5, tod: 'day', TOD, time: 0, frame: 0, cubeAge: 1e9, cubeFace: -1,
+    storm: 0, sunBase: new T.Color(), ambBase: new T.Color(), hzBase: new T.Color(),      // the clear-sky light; the weather scales it (applyStorm)
 
     init(renderer) {
       this.renderer = renderer;
@@ -235,7 +239,7 @@ void main(){
       this.skyMat = DB.fsMat(SKY_FRAG, Object.assign({
         uMode: { value: 0 }, uFace: { value: 0 }, uSunDir: { value: this.sunDir }, uSunCol: { value: this.sunColor }, uAmbCol: { value: this.ambColor },
         uSeaCol: { value: this.seaColor }, uTime: { value: 0 }, uCoverage: { value: 0.4 }, uSteps: { value: DB.Q.cloudSteps }, uJitter: { value: 0 },
-        uCirrus: { value: 0.5 }, uNoise: { value: this.noiseTex },
+        uCirrus: { value: 0.5 }, uNoise: { value: this.noiseTex }, uStorm: { value: 0 }, uFlash: { value: 0 }, uFlashDir: { value: new T.Vector3(0, 1, 0) },
       }, camU));
       const so = { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter };
       this.rtSkyRaw = new T.WebGLRenderTarget(4, 4, so);
@@ -284,9 +288,22 @@ void main(){
       const hz = [0, 0, 0];
       for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; const c = atmosphereJS([Math.cos(a) * 0.9994, 0.035, Math.sin(a) * 0.9994], sd); hz[0] += c[0] / 8; hz[1] += c[1] / 8; hz[2] += c[2] / 8; }
       this.horizonColor.setRGB(hz[0], hz[1], hz[2]);
+      this.sunBase.copy(this.sunColor); this.ambBase.copy(this.ambColor); this.hzBase.copy(this.horizonColor);
+      if (this.storm) this.applyStorm(this.storm);
       this.cubeAge = 1e9; // force IBL refresh
       this.dirty = true;
     },
+
+    // k = 0 clear … 1 full storm: the overcast closes, takes the direct sun and most of the skylight, and what is left goes slate
+    applyStorm(k) {
+      this.storm = k;
+      const p = TOD[this.tod], u = this.skyMat.uniforms, lum = (c) => 0.3 * c.r + 0.55 * c.g + 0.15 * c.b, la = lum(this.ambBase), lh = lum(this.hzBase);
+      this.sunColor.copy(this.sunBase).multiplyScalar(1 - 0.955 * k);
+      this.ambColor.setRGB(M.lerp(this.ambBase.r, la * 0.3, k), M.lerp(this.ambBase.g, la * 0.34, k), M.lerp(this.ambBase.b, la * 0.4, k));
+      this.horizonColor.setRGB(M.lerp(this.hzBase.r, lh * 0.2, k), M.lerp(this.hzBase.g, lh * 0.23, k), M.lerp(this.hzBase.b, lh * 0.27, k));
+      u.uCoverage.value = M.lerp(p.coverage, 1.02, k); u.uCirrus.value = p.cirrus * (1 - k); u.uStorm.value = k;
+    },
+    setFlash(f, dir) { const u = this.skyMat.uniforms; u.uFlash.value = f; u.uFlashDir.value.copy(dir); },
 
     resize(w, h) {
       const s = DB.Q.skyScale;
