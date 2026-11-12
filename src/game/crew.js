@@ -1,12 +1,13 @@
-// Project Deep Blue — the skipper: a skinned, animated character (assets/chars.js) who keeps you company on deck,
-// dances when a fish comes aboard and takes the wheel — hands on the rim — when the boat is under way.
+// Project Deep Blue — the skipper: a skinned, animated character (assets/chars.js). She is the player: unseen in first person
+// (the camera is her eyes), seen with her hands on the rod in the third-person view, and at the wheel — hands on the rim —
+// when the boat is under way. On the title screen she dances on the cabin top.
 (function () {
   'use strict';
   const DB = window.DB, T = THREE, M = DB.M;
   const V3 = (x, y, z) => new T.Vector3(x, y, z), Q = () => new T.Quaternion();
   const S = V3(), E0 = V3(), H0 = V3(), E = V3(), dT = V3(), P = V3(), a0 = V3(), a1 = V3(), tg = V3(), q = Q(), pq = Q(), dq = Q(), UP = V3(0, 1, 0);
-  // boat-local posts. yaw: 0 faces aft (toward the angler in the cockpit), PI faces the bow
-  const POST = { deck: { x: 0.22, z: 0.72, yaw: -0.3 }, helm: { x: 0.92, z: -0.33, yaw: Math.PI }, roof: { x: 0, y: 2.17, z: -2.85, yaw: Math.PI - 0.5 } };      // roof: on the cabin top, for the title screen
+  // boat-local posts. yaw: 0 faces aft, PI faces the bow. deck = where the angler stands (under Boat.eyeLocal), turned to wherever she is looking
+  const POST = { deck: { x: -0.3, z: 2.5, yaw: -0.3 }, helm: { x: 0.92, z: -0.33, yaw: Math.PI }, roof: { x: 0, y: 2.17, z: -2.85, yaw: Math.PI - 0.5 } };      // roof: on the cabin top, for the title screen
 
   // turn `bone` (in world space) so the direction `from` becomes `to`, blended by k
   function aim(bone, from, to, k) {
@@ -41,13 +42,17 @@
     setPost(p) { this.post = p; },
     cheer(sec = 5) { this.cheerT = Math.max(this.cheerT, sec); },
 
-    // party: dance regardless (title screen)
-    update(dt, camera, party) {
-      const ch = this.ch; if (!ch || !ch.group.visible || dt <= 0) return;
+    // party: dance regardless (title screen). st: { show, yaw / pitch (of the view, boat-local), rod (0..1: hands on the fishing rod) }
+    update(dt, camera, party, st) {
+      const ch = this.ch; if (!ch) return;
+      ch.group.visible = party || st.show;
+      if (!ch.group.visible || dt <= 0) return;
       const B = DB.Boat, b = this.b, target = this.post === 'helm' ? 1 : 0, moving = Math.abs(target - this.k) > 0.02;
       this.k = M.clamp(this.k + Math.sign(target - this.k) * dt / 1.1, 0, 1);
       const e = this.k * this.k * (3 - 2 * this.k), A = POST.deck, H = POST.helm;
-      ch.group.position.set(M.lerp(A.x, H.x, e), 0, M.lerp(A.z, H.z, e));
+      A.yaw = M.dampAngle(A.yaw, st.yaw + Math.PI, 10, dt);      // she faces where the view faces
+      const lean = (0.15 + 0.3 * Math.max(st.pitch, 0)) * st.rod;      // with the rod in her hands she stands a little forward of the eye point (more when the rod is held high), so both grips are within reach
+      ch.group.position.set(M.lerp(A.x - Math.sin(st.yaw) * lean, H.x, e), 0, M.lerp(A.z - Math.cos(st.yaw) * lean, H.z, e));
       ch.group.rotation.y = moving ? M.lerp(A.yaw, H.yaw, e) : target ? H.yaw : A.yaw;
       if (party) { ch.group.position.set(POST.roof.x, POST.roof.y, POST.roof.z); ch.group.rotation.y = POST.roof.yaw; }      // dancing on the cabin top while the title is up
       // blend the three clips
@@ -67,10 +72,19 @@
           reach(arm, fore, hand, tg, a0.copy(P), hk);
         }
       }
-      // eyes on the angler when on deck, into the turn when driving
+      // fishing, seen from outside: both hands on the rod (left on the fore grip, right on the crank), elbows down and out
+      const rk = (1 - M.sat(this.k * 4)) * st.rod;
+      if (rk > 0.01) {
+        const F = DB.Fishing;
+        for (const [side, arm, fore, hand, which] of [[1, b.RightArm, b.RightForeArm, b.RightHand, 1], [-1, b.LeftArm, b.LeftForeArm, b.LeftHand, 0]]) {
+          F.gripWorld(which, tg);
+          P.set(side * 0.7, -1, -0.35).applyQuaternion(ch.group.getWorldQuaternion(q));
+          reach(arm, fore, hand, tg, a0.copy(P), rk);
+        }
+      }
+      // into the turn when driving
       let want2 = 0;
       if (target) want2 = B.rudder * 0.45;
-      else if (!dance && camera) { tg.copy(camera.position); ch.group.worldToLocal(tg); if (tg.lengthSq() < 60) want2 = M.clamp(Math.atan2(tg.x, tg.z), -1.15, 1.15); }
       this.look = M.damp(this.look, want2, 3, dt);
       if (Math.abs(this.look) > 0.01) for (const [bone, part] of [[b.Neck, 0.4], [b.Head, 0.6]]) {
         a0.copy(UP).transformDirection(B.group.matrixWorld);

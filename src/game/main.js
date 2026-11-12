@@ -7,6 +7,7 @@
   const G = (DB.Game = {
     state: 'boot', time: 0, look: { yaw: 2.498, pitch: -0.17, dYaw: 0, dPitch: 0 }, under: false, trans: null, paused: false, noLock: false, flash: 0, wet: 0, damage: 0, fade: 1, chaseT: 0, fovT: 62, ms: 16, msAcc: 0, msN: 0,
     drive: false, dK: 0, dCam: { yaw: 0, pitch: 0.15, h: 0, idle: 0 }, shake: 0, ctl: { throttle: 0, steer: 0 }, danger: 0,
+    third: false, tK: 0,      // third-person view while fishing (V), and how far the camera has moved out to it
   });
   let renderer, scene, camera, last = 0;
   const qH = new T.Quaternion(), qT = new T.Quaternion(), qL = new T.Quaternion(), qC = new T.Quaternion(), eu = new T.Euler(0, 0, 0, 'YXZ'), YAX = new T.Vector3(0, 1, 0), v1 = new T.Vector3(), v2 = new T.Vector3(), v3 = new T.Vector3(), m4 = new T.Matrix4();
@@ -254,6 +255,20 @@
     on('freeMouse', () => UI.toast('이 화면은 마우스 고정을 지원하지 않아 커서로 조작합니다 — 좌우 끝에 커서를 두면 계속 돌고, Esc 로 일시정지', '', 7));
   }
 
+  const _crew = { show: false, yaw: 0, pitch: 0, rod: 0 };
+  // keep the over-the-shoulder camera on the near side of the boat's structure: cast from her head toward where the camera wants to be
+  let boatMeshes = null; const ray = new T.Raycaster();
+  // (the allowed share of the way is eased: in quickly when something is in the way, out slowly, so a rocking boat does not make the camera hop)
+  let clipK = 1;
+  function shoulderClip(head, pos, dt) {
+    if (!boatMeshes) { boatMeshes = []; DB.Boat.group.traverse((o) => { if (o.isMesh && !o.isSkinnedMesh) boatMeshes.push(o); }); }
+    const d = v1.subVectors(pos, head), len = d.length(); if (len < 0.1) return;
+    ray.set(head, d.multiplyScalar(1 / len)); ray.far = len + 0.25; ray.near = 0.3;
+    const hit = ray.intersectObjects(boatMeshes, false)[0], want = hit ? Math.max(hit.distance - 0.3, 0.35) / len : 1;
+    clipK = Math.min(M.damp(clipK, want, want < clipK ? 14 : 2.5, dt), 1);
+    pos.copy(head).addScaledVector(ray.ray.direction, len * clipK);
+  }
+
   // what the events need to know about the moment (calm = no fish on the line, so nothing else is asking for attention)
   const _ev = {};
   function evCtx() {
@@ -301,8 +316,8 @@
     if (G.drive && playing) { ctl.throttle = (Input.down('KeyW') ? 1 : 0) - (Input.down('KeyS') ? 1 : 0); ctl.steer = (Input.down('KeyA') ? 1 : 0) - (Input.down('KeyD') ? 1 : 0); }
     B.update(dt, ctl);
     DB.Sea.update(dt, camera);
-    DB.Crew.update(dt, camera, G.state === 'title');
     G.dK = M.clamp(G.dK + (G.drive ? dt : -dt) / 0.9, 0, 1);
+    G.tK = M.clamp(G.tK + (G.third && G.state === 'boat' && !G.drive ? dt : -dt) / 0.35, 0, 1);
     G.shake = Math.max(G.shake - dt * 2.2, 0);
     let zoom = false;
     if (G.state === 'title') {
@@ -328,6 +343,17 @@
       B.eyeWorld(camera.position);
       qH.setFromAxisAngle(YAX, B.heading); qT.setFromEuler(eu.set(B.pitch * 0.25, 0, B.roll * 0.25)); qL.setFromEuler(eu.set(look.pitch, look.yaw, 0));
       camera.quaternion.copy(qH).multiply(qT).multiply(qL);
+      F.eye.position.copy(camera.position); F.eye.quaternion.copy(camera.quaternion); F.eye.updateMatrixWorld(true);      // the rod hangs from here whatever the camera does next
+      // … or over her shoulder (V): back and up to the right of where she stands, looking where she looks, and never through the cabin
+      if (G.tK > 0) {
+        const e = G.tK * G.tK * (3 - 2 * G.tK); v1.set(0, 0, -1).applyQuaternion(camera.quaternion);
+        const hl = Math.hypot(v1.x, v1.z) || 1, fx = v1.x / hl, fz = v1.z / hl;
+        v2.copy(camera.position).addScaledVector(v1, 7);      // what she is looking at
+        v3.set(camera.position.x - fx * 2.7 - fz * 1.0, camera.position.y + 0.45 - v1.y * 0.8, camera.position.z - fz * 2.7 + fx * 1.0);
+        v3.y = Math.max(v3.y, DB.Ocean.height(v3.x, v3.z) + 0.5);
+        shoulderClip(camera.position, v3, dt);
+        camera.position.lerp(v3, e); camera.quaternion.slerp(qC.setFromRotationMatrix(m4.lookAt(v3, v2, YAX)), e);
+      }
       // … blended into the chase camera while at the helm
       if (G.dK > 0) { const e = G.dK * G.dK * (3 - 2 * G.dK); chaseCam(dt, v3, qC); camera.position.lerp(v3, e); camera.quaternion.slerp(qC, e); }
       if (G.drive) {
@@ -339,6 +365,7 @@
         G.chaseT = Math.max(G.chaseT - dt, 0);
         if (Input.pressed('KeyF')) goDive();
         if (Input.pressed('KeyE')) setDrive(true);
+        if (Input.pressed('KeyV')) { G.third = !G.third; UI.toast(G.third ? '3인칭 시점 — V 로 돌아가기' : '1인칭 시점', '', 2); }
       }
       G.fade = M.damp(G.fade, 0, 2.2, dt);
       if (Input.pressed('KeyR')) DB.Weather.toggle();
@@ -363,6 +390,11 @@
     DB.Events.update(dt, evCtx());
     if (G.state === 'boat') F.update(dt, G.trans || G.drive || G.dK > 0 ? NOINPUT : Input, look);
     if (G.state === 'dive') D.update(dt, G.trans ? NOINPUT : Input, look);
+    // the skipper is the player: seen at the wheel, in the third-person view, and whenever a debug view looks at the boat from outside
+    const out = G.tK > 0.02 || !!DB.debug.view;
+    F.showArms(!out);
+    _crew.show = G.state === 'boat' && (G.dK > 0.12 || out); _crew.yaw = look.yaw; _crew.pitch = look.pitch; _crew.rod = out && F.active && F.state !== 'trophy' ? 1 : 0;      // (with a fish aboard she lets go of the rod and dances)
+    DB.Crew.update(dt, camera, G.state === 'title', _crew);
     DB.FX.update(dt, camera, G.under);
     // camera optics
     const sp = Math.abs(B.u);
@@ -502,7 +534,7 @@
       for (let i = 0; i < 300 && !(F.state === 'charge' && F.power >= release); i++) tick(1 / 60);
       DB.debug.mouse(false, 0);
       for (let i = 0; i < 600 && F.state !== 'wait' && F.state !== 'tangle'; i++) tick(1 / 60);
-      const r = { kind: castKind, dist: F.dist, state: F.state };
+      const r = { kind: castKind, dist: F.dist, state: F.state, at: F.lurePos.clone() };
       F.state = 'idle'; F.lurePos.copy(F.tip).y -= 0.5; F.lurePrev.copy(F.lurePos); return r;
     };
     const cHalf = cast(0.5), cFull = cast(0.96), cOver = cast(1.1);
@@ -518,6 +550,19 @@
     if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard();
     UI.dropCatches(UI.session.length);      // test catches don't belong in the player's log
 
+    // --- the third-person view (V): the camera stands back, she appears with her hands on the rod, and a cast still goes where she looks
+    {
+      const C = DB.Crew, gap = () => camera.position.distanceTo(F.eye.position);
+      G.third = true; for (let i = 0; i < 60; i++) tick(1 / 60);
+      const back = gap(), shown = C.ch.group.visible, armsOff = !F.armL.group.visible;
+      let reachL = 9, reachR = 9;
+      if (C.ch) { C.b.LeftHand.getWorldPosition(v1); reachL = v1.distanceTo(F.gripWorld(0, v2)); C.b.RightHand.getWorldPosition(v1); reachR = v1.distanceTo(F.gripWorld(1, v2)); }
+      const c3 = cast(0.96); v1.set(0, 0, -1).applyQuaternion(F.eye.quaternion); v2.copy(F.lurePos);
+      const land = Math.atan2(c3.at.x - F.eye.position.x, c3.at.z - F.eye.position.z), aimed = Math.atan2(v1.x, v1.z);
+      G.third = false; for (let i = 0; i < 60; i++) tick(1 / 60);
+      check('third-person view: camera behind her, hands on the rod, cast goes where she looks', back > 1.2 && shown && armsOff && reachL < 0.15 && reachR < 0.15 && Math.abs(M.wrapPi(land - aimed)) < 0.05 && gap() < 0.01 && !C.ch.group.visible && F.armL.group.visible,
+        `camera ${back.toFixed(1)} m back, hands ${(reachL * 100).toFixed(0)} / ${(reachR * 100).toFixed(0)} cm off the grips, cast ${((M.wrapPi(land - aimed) * 180) / Math.PI).toFixed(1)}° off her line of sight; back in first person ${gap().toFixed(3)} m`);
+    }
     // --- the bite: nibbles first, a fresh strike on the run hooks, holding the button or striking early does not
     const ev = {}; for (const e of ['nibble', 'bite', 'early', 'hook', 'lostInterest']) DB.on(e, () => { ev[e] = (ev[e] || 0) + 1; });
     const waitFor = (policy, maxT) => {

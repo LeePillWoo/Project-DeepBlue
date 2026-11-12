@@ -1,4 +1,6 @@
 // Project Deep Blue — boat fishing: first-person rod/reel/arms rig, line + lure physics, cast → bite → fight → land.
+// The rig hangs from `eye`, an object main.js keeps at the angler's eyes: in first person that is where the camera is too;
+// in the third-person view the camera stands back and the skipper's own hands are put on the rod (crew.js).
 (function () {
   'use strict';
   const DB = window.DB, T = THREE, M = DB.M, G = DB.G;
@@ -22,13 +24,15 @@
     return g;
   }
   // right hand wrapped around a pole along +Y (thumb toward +Y), back of the hand on +X, wrist toward +Z
-  function handGeo(Rg, cF = 0x17181b, cB = 0x1c1d21, cK = 0x33363c, cS = 0x09090b) {
-    const parts = [], fr = [0.0102, 0.0106, 0.0099, 0.0088], fy = [0.0348, 0.0118, -0.0112, -0.0328];
+  // bare = a woman's bare hand (slimmer fingers, painted nails, no cuff) instead of a glove
+  function handGeo(Rg, cF = 0x17181b, cB = 0x1c1d21, cK = 0x33363c, cS = 0x09090b, bare = false) {
+    const parts = [], fr = [0.0102, 0.0106, 0.0099, 0.0088].map((r) => r * (bare ? 0.8 : 1)), fy = [0.0348, 0.0118, -0.0112, -0.0328];
     for (let i = 0; i < 4; i++) {
       const Rf = Rg + fr[i] * 0.9;
       const pts = [-8, -86, -157, -222 + i * 5].map((a) => V3(Math.cos((a * Math.PI) / 180) * Rf, fy[i], Math.sin((a * Math.PI) / 180) * Rf));
       for (let k = 0; k < 3; k++) parts.push(G.tint(capBetween(pts[k], pts[k + 1], fr[i] * (1 - k * 0.07), 10), cF));
-      parts.push(G.tint(G.xf(G.sph(fr[i] * 1.3, 12, 10), [pts[0].x + 0.0035, pts[0].y, pts[0].z + 0.002]), cK));       // knuckle
+      parts.push(G.tint(G.xf(G.sph(fr[i] * (bare ? 1.08 : 1.3), 12, 10), [pts[0].x + 0.0035, pts[0].y, pts[0].z + 0.002]), cK));       // knuckle
+      if (bare) { const d = pts[3].clone().sub(pts[2]).normalize(), o = pts[3].clone().multiplyScalar(1 + (fr[i] * 0.62) / pts[3].length()); parts.push(G.tint(G.xf(G.sph(1, 8, 6), [o.x + d.x * 0.002, o.y, o.z + d.z * 0.002], [0, Math.atan2(-o.z, o.x), 0], [fr[i] * 0.35, fr[i] * 0.72, fr[i] * 0.95]), cS)); }      // nail
     }
     // back of the hand: tapered dome instead of a slab
     const dome = G.sph(1, 24, 16), dp = dome.attributes.position;
@@ -41,11 +45,14 @@
     // thumb + thenar
     const tA = V3(Rg + 0.012, 0.045, 0.056), tB = V3(Rg * 0.35, 0.058, Rg + 0.014), tC = V3(-(Rg + 0.003), 0.052, Rg * 0.35);
     parts.push(G.tint(capBetween(tA, tB, 0.0122, 10), cF), G.tint(capBetween(tB, tC, 0.0108, 10), cF), G.tint(G.xf(G.sph(0.0175, 12, 10), [tA.x - 0.002, tA.y - 0.006, tA.z + 0.008]), cB));
-    // cuff + strap
-    parts.push(G.tint(G.xf(G.cyl(0.0325, 0.0285, 0.06, 20), [Rg + 0.0155, 0, 0.104], [Math.PI / 2, 0, 0], [1, 1, 1.42]), cB));
-    parts.push(G.tint(G.xf(G.cyl(0.0335, 0.0335, 0.016, 20), [Rg + 0.0155, 0, 0.098], [Math.PI / 2, 0, 0], [1, 1, 1.4]), cS));
+    if (bare) parts.push(G.tint(G.xf(G.cyl(0.027, 0.0255, 0.05, 20), [Rg + 0.0155, 0, 0.1], [Math.PI / 2, 0, 0], [1, 1, 1.3]), cB));      // wrist
+    else {      // cuff + strap
+      parts.push(G.tint(G.xf(G.cyl(0.0325, 0.0285, 0.06, 20), [Rg + 0.0155, 0, 0.104], [Math.PI / 2, 0, 0], [1, 1, 1.42]), cB));
+      parts.push(G.tint(G.xf(G.cyl(0.0335, 0.0335, 0.016, 20), [Rg + 0.0155, 0, 0.098], [Math.PI / 2, 0, 0], [1, 1, 1.4]), cS));
+    }
     return G.merge(parts);
   }
+  const foreBare = (() => { const g = new T.CylinderGeometry(0.041, 0.0255, 1, 22, 6, true); g.translate(0, 0.5, 0); g.scale(1, 1, 1.22); return G.merge([g]); })();      // unit-length bare forearm along +Y (wrist at 0)
   const foreGeo = (() => {      // unit-length sleeve along +Y (wrist at 0) with soft folds, cuff at the wrist end
     const g = new T.CylinderGeometry(0.049, 0.0335, 1, 22, 16, true); g.translate(0, 0.5, 0);
     const p = g.attributes.position;
@@ -59,7 +66,10 @@
     return G.merge([g, cuff]);
   })();
 
+  const SKIN = 0xd9a685, NAIL = 0xc23a4a;
+  // wet: neoprene for the dive. 'bare': the skipper's own arms
   function armMaterials(wet) {
+    if (wet === 'bare') return { sleeve: new T.MeshStandardMaterial({ color: SKIN, roughness: 0.55 }), glove: new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.55 }), bare: true };
     const A = DB.Assets, jersey = A && A.texSet('jersey_melange'), fleece = A && A.texSet('knitted_fleece');
     const rep = (t, x, y) => { if (!t) return null; const c = t.clone(); c.repeat.set(x, y); c.needsUpdate = true; return c; };
     const sleeve = new T.MeshStandardMaterial({ color: wet ? 0x0b0c0e : 0x2c3852, roughness: wet ? 0.5 : 0.95, map: !wet && jersey ? rep(jersey.map, 3, 5) : null, normalMap: jersey ? rep(wet ? fleece.normalMap : jersey.normalMap, wet ? 7 : 3, wet ? 12 : 5) : null, normalScale: new T.Vector2(wet ? 0.5 : 1, wet ? -0.5 : -1) });
@@ -68,9 +78,10 @@
   }
 
   function Arm(left, Rg, mats) {
-    const hg = handGeo(Rg);
+    const hg = mats.bare ? handGeo(Rg, SKIN, SKIN, 0xd09a7c, NAIL, true) : handGeo(Rg);
     this.hand = new T.Mesh(left ? mirrorY(hg) : hg, mats.glove);
-    this.fore = new T.Mesh(foreGeo, mats.sleeve);
+    this.fore = new T.Mesh(mats.bare ? foreBare : foreGeo, mats.sleeve);
+    if (mats.bare && left) { const bangle = new T.Mesh(G.xf(G.torus(0.031, 0.0028, 8, 24), [Rg + 0.0155, 0, 0.128], null, [1, 1.3, 1]), new T.MeshStandardMaterial({ color: 0xd8b04a, metalness: 1, roughness: 0.25 })); this.hand.add(bangle); }
     this.hand.castShadow = this.fore.castShadow = true;
     this.Rg = Rg; this.group = new T.Group(); this.group.add(this.hand, this.fore);
   }
@@ -101,7 +112,8 @@
 
     init(scene, camera) {
       this.scene = scene; this.camera = camera;
-      const rig = (this.rig = new T.Group()); camera.add(rig);
+      const eye = (this.eye = new T.Group()); scene.add(eye);
+      const rig = (this.rig = new T.Group()); eye.add(rig);
       const base = (this.base = new T.Group()); rig.add(base);
       const st = (o) => new T.MeshStandardMaterial(o);
       const mat = (this.mats = {
@@ -140,7 +152,7 @@
       this.guides = GUIDES.map((s, k) => { const r = M.lerp(0.0115, 0.0036, k / (GUIDES.length - 1)); const g = new T.Mesh(G.torus(r, Math.max(r * 0.16, 0.0009), 6, 18), mat.steel); g.userData = { s, r }; base.add(g); return g; });
       this.curve = []; for (let i = 0; i <= NS; i++) this.curve.push({ p: V3(), t: V3(), u: V3() });
       // arms
-      const am = armMaterials(false);
+      const am = armMaterials('bare');
       this.armL = new Arm(true, 0.0172, am); this.armR = new Arm(false, 0.0125, am);
       base.add(this.armL.group, this.armR.group);
       // lure + line (world space)
@@ -157,6 +169,12 @@
       this.lurePos.copy(this.tip).add(V3(0, -0.8, 0)); this.lurePrev.copy(this.lurePos);
     },
 
+    // third person: the first-person arms go, the skipper's own are put on the rod. gripWorld: where her hands belong (0 = fore grip, 1 = crank knob)
+    showArms(on) { this.armL.group.visible = this.armR.group.visible = on; },
+    gripWorld(which, out) {
+      if (which === 0) out.set(0, 0.145, 0); else out.set(0.075, 0.03 + Math.cos(this.crank) * 0.066, 0.06 + Math.sin(this.crank) * 0.066);
+      return this.base.localToWorld(out);
+    },
     setActive(on) { this.active = on; this.rig.visible = on; this.lure.visible = on && this.state !== 'fight' && this.state !== 'trophy'; this.line.mesh.visible = on; if (this.fish) this.fish.mesh.visible = on; },
 
     // place the rod in camera space (yaw/pitch offsets in radians) and bend it toward `loadDir` (rod-local) by angle `bend`
@@ -241,7 +259,7 @@
     // ---------------------------------------------------------------- per-frame
     update(dt, inp, look) {
       this.t += dt;
-      const O = DB.Ocean, cam = this.camera, reelHeld = inp.mouse(0) && this.active;
+      const O = DB.Ocean, cam = this.eye, reelHeld = inp.mouse(0) && this.active;
       this.tipWorld();
       if (this.escaped) { this.escaped.t += dt; if (this.escaped.t > 25) this.escaped = null; }
       let yawT = 0, pitchT = 0, loadT = 0.016, slackT = 0.4, cranking = 0;
@@ -484,7 +502,7 @@
       const hx = Math.sin(f.head) * Math.cos(f.pitchA), hz = Math.cos(f.head) * Math.cos(f.pitchA);
       this.end.set(f.pos.x + hx * f.L * 0.42, f.pos.y + Math.sin(f.pitchA) * f.L * 0.42, f.pos.z + hz * f.L * 0.42);
       // rod aim relative to the view
-      const fw = _d.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
+      const fw = _d.set(0, 0, -1).applyQuaternion(this.eye.quaternion);
       this.fishOff = M.wrapPi(Math.atan2(f.pos.x - this.tip.x, f.pos.z - this.tip.z) - Math.atan2(fw.x, fw.z));     // how far off-axis the fish is (the view eases toward it)
       out.yaw = M.clamp(this.fishOff, -0.4, 0.4);
       out.pitch = M.lerp(-0.3, 0.78, rodA) + shake * 0.5 + (f.jump ? 0.06 : 0); out.load = 0.12 + 0.88 * Math.min(T_, 1); out.slack = Math.max(0.5 - T_ * 2.2, 0); out.crank = reel ? (1 - 0.6 * T_) * (0.5 + Math.min(down * 1.5, 1)) : 0;

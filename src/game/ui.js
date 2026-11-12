@@ -84,7 +84,7 @@
       if (key !== null) this.hint(key);
       let p = extraPrompt || '';
       if (!p && !this.cardOn) {
-        if (st === 'idle') p = `<kbd>좌클릭</kbd>길게 눌러 캐스팅 &nbsp; <kbd>E</kbd>운전 &nbsp; ${canDive ? '<kbd>F</kbd>다이빙' : '<span style="opacity:.6">다이빙은 REEF 부표 근처에서</span>'}`;
+        if (st === 'idle') p = `<kbd>좌클릭</kbd>길게 눌러 캐스팅 &nbsp; <kbd>E</kbd>운전 &nbsp; <kbd>V</kbd>시점 &nbsp; ${canDive ? '<kbd>F</kbd>다이빙' : '<span style="opacity:.6">다이빙은 REEF 부표 근처에서</span>'}`;
         else if (st === 'charge') {      // 12 cells over 0 … 1.2: white while loading, green where a release is perfect, red once overloaded
           let g = ''; for (let i = 0; i < 12; i++) { const on = F.power > i * 0.1, col = i >= 10 ? '#ff8a7a' : i === 9 ? '#a8ff5a' : '#fff'; g += `<span style="color:${col};opacity:${on ? 1 : 0.28}">▮</span>`; }
           p = `캐스팅 ${g} &nbsp;<span style="opacity:.75">초록에서 놓기 · 빨강은 백래시</span>`;
