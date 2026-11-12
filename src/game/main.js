@@ -6,7 +6,7 @@
   // state: boot | title | boat | dive.  drive: at the helm (state stays 'boat').  dK: 0 = angler's eyes, 1 = chase camera
   const G = (DB.Game = {
     state: 'boot', time: 0, look: { yaw: 2.498, pitch: -0.17, dYaw: 0, dPitch: 0 }, under: false, trans: null, paused: false, noLock: false, flash: 0, wet: 0, damage: 0, fade: 1, chaseT: 0, fovT: 62, ms: 16, msAcc: 0, msN: 0,
-    drive: false, dK: 0, dCam: { yaw: 0, pitch: 0.15, h: 0, idle: 0 }, shake: 0, ctl: { throttle: 0, steer: 0 },
+    drive: false, dK: 0, dCam: { yaw: 0, pitch: 0.15, h: 0, idle: 0 }, shake: 0, ctl: { throttle: 0, steer: 0 }, danger: 0,
   });
   let renderer, scene, camera, last = 0;
   const qH = new T.Quaternion(), qT = new T.Quaternion(), qL = new T.Quaternion(), qC = new T.Quaternion(), eu = new T.Euler(0, 0, 0, 'YXZ'), YAX = new T.Vector3(0, 1, 0), v1 = new T.Vector3(), v2 = new T.Vector3(), v3 = new T.Vector3(), m4 = new T.Matrix4();
@@ -48,7 +48,7 @@
     await step(0.5, '섬과 다른 배들 띄우는 중…', () => { DB.Sea.init(scene); DB.Boat.colliders = DB.Sea.colliders; DB.Crew.init(); });
     await step(0.58, '낚시 장비 준비 중…', () => { DB.Fishing.init(scene, camera); for (const k of ['marlin', 'sailfish', 'tuna', 'mahi', 'amberjack', 'seabream', 'grouper']) DB.Fish.get(k); });
     await step(0.68, '산호초와 난파선 배치 중…', () => DB.Reef.init(scene));
-    await step(0.8, '수중 생물 풀어놓는 중…', () => DB.Dive.init(scene, camera));
+    await step(0.8, '수중 생물 풀어놓는 중…', () => { DB.Dive.init(scene, camera); DB.Wild.init(scene); });
     await step(0.87, '텍스처 디코딩 중…', () => DB.Assets.ready());
     await step(0.9, '도감 사진 촬영 중…', () => { DB.Dex.init(renderer); UI.stat(); });
     Input.init(canvas);
@@ -146,6 +146,7 @@
   // ------------------------------------------------------------------ events → ui / audio
   function wire() {
     const A = DB.Audio, on = DB.on, SP = DB.Species, name = (k) => SP[k].name;
+    const eun = (w) => w + ((w.charCodeAt(w.length - 1) - 0xac00) % 28 ? '은' : '는');      // topic particle after a Korean word
     on('cast', () => A.play('cast'));
     on('plop', () => A.play('plop', { delay: DB.Fishing.dist / 340 }));
     on('nibble', () => A.play('nibble'));
@@ -174,19 +175,26 @@
     on('shoot', () => A.play('shoot')); on('thud', () => A.play('thud')); on('reload', () => A.play('reload')); on('exhale', () => A.play('exhale')); on('torch', () => A.play('click'));
     on('spearHit', (d) => { A.play('hit'); if (!d.kill) UI.toast(`${name(d.key)} 명중 — 아직 살아 있습니다`, 'warn', 2.5); });
     on('sting', () => { A.play('sting'); G.damage = 1; UI.toast('해파리에 쏘였습니다!', 'bad'); });
-    on('sharkNear', () => { A.play('alarm'); UI.toast('상어가 다가옵니다 — 작살로 쫓아낼 수 있습니다', 'bad', 4.5); });
+    on('sharkNear', (sh) => { A.play('alarm'); UI.toast(sh && sh.big ? '백상아리가 다가옵니다 — 작살 두 발을 맞혀야 물러납니다' : '상어가 다가옵니다 — 작살로 쫓아낼 수 있습니다', 'bad', 4.5); });
     on('sharkCharge', () => A.play('alarm'));
-    on('sharkHit', (sh) => { A.play('hit'); const L = sh ? sh.L : 2.6, info = UI.addCatch({ key: 'shark', L, kg: SP.shark.wK * L * L * L, method: 'watch' }); UI.toast(`상어를 쫓아냈습니다 (+${info.pts})`, 'good'); });
+    on('sharkFlinch', () => { A.play('hit'); UI.toast('백상아리가 움찔했습니다 — 한 발 더!', 'warn', 3); });
+    on('sharkHit', (sh) => { A.play('hit'); const key = sh ? sh.key : 'shark', L = sh ? sh.L : 2.6, info = UI.addCatch({ key, L, kg: SP[key].wK * L * L * L, method: 'watch' }); UI.toast(`${name(key)}를 쫓아냈습니다 (+${info.pts})`, 'good'); });
     on('sharkBite', (d) => {
       A.play('bitten'); G.damage = 1; if (d.stolen) UI.dropCatches(1);
-      UI.addCatch({ key: 'shark', L: d.L, kg: 0, method: 'watch' });      // you have certainly met one now
-      UI.toast(d.stolen ? `상어에게 물렸습니다! ${name(d.stolen.key)}을(를) 빼앗겼습니다` : '상어에게 물렸습니다!', 'bad', 4.5);
+      UI.addCatch({ key: d.key, L: d.L, kg: 0, method: 'watch' });      // you have certainly met one now
+      UI.toast(d.stolen ? `${name(d.key)}에게 물렸습니다! ${name(d.stolen.key)}을(를) 빼앗겼습니다` : `${name(d.key)}에게 물렸습니다!`, 'bad', 4.5);
     });
     on('blackoutStart', () => UI.toast('산소 고갈…', 'bad', 3));
     on('blackout', () => leaveWater('blackout'));
     on('escaped', () => UI.toast('놓친 대어가 깊은 바다로 사라졌습니다', 'warn'));
     on('ink', () => A.play('ink'));
-    on('protected', () => UI.toast('바다거북은 보호종입니다 — 작살이 등딱지에 튕겨 나갔습니다', 'warn', 4));
+    on('protected', (key) => UI.toast(key === 'turtle' ? '바다거북은 보호종입니다 — 작살이 등딱지에 튕겨 나갔습니다' : `${eun(name(key))} 보호종입니다 — 작살을 거뒀습니다`, 'warn', 4));
+    // the big ones passing through
+    on('wildBlow', (d) => {
+      if (d.under) { if (d.first) A.play('whale'); return; }
+      A.play('spray', { s: M.clamp(1.1 - d.d / 110, 0.05, 0.8) });
+      if (d.first) UI.toast(d.key === 'orca' ? '물 위로 검은 등지느러미가 솟습니다 — 범고래 무리!' : '멀리서 물기둥이 솟습니다 — 고래입니다!', 'good', 5);
+    });
     // under way
     on('slam', (k) => { A.play('slam', { s: Math.min(k, 1.3) }); G.shake = Math.max(G.shake, k); if (G.drive) G.wet = Math.max(G.wet, 0.35 + k * 0.4); });
     on('bowSplash', (k) => { A.play('spray', { s: k }); G.shake = Math.max(G.shake, k * 0.35); });
@@ -288,6 +296,7 @@
       camera.position.copy(v1); camera.quaternion.setFromRotationMatrix(m4.lookAt(v1, v2, YAX));
     }
     camera.updateMatrixWorld();
+    DB.Wild.update(dt, camera, G.under, (G.state === 'boat' || G.state === 'dive') && !G.trans);
     if (G.state === 'boat') F.update(dt, G.trans || G.drive || G.dK > 0 ? NOINPUT : Input, look);
     if (G.state === 'dive') D.update(dt, G.trans ? NOINPUT : Input, look);
     DB.FX.update(dt, camera, G.under);
@@ -302,6 +311,9 @@
     // screen effects
     G.flash = M.damp(G.flash, 0, G.under ? 2.2 : 3.5, dt); G.wet = Math.max(G.wet - dt / 7, 0); G.damage = Math.max(G.damage - dt * 0.9, 0);
     fx.flash = G.flash; fx.wet = G.under ? 0 : G.wet; fx.damage = G.damage;
+    // red at the edges while something dangerous is close; it throbs, faster once a shark commits
+    G.danger = M.damp(G.danger, G.state === 'dive' ? D.danger : 0, 3, dt);
+    fx.danger = G.danger * (0.8 + 0.2 * Math.sin(G.time * (D.danger >= 1 ? 13 : 5)));
     if (G.under) {
       const low = D.o2 < 0.22 ? 1 - D.o2 / 0.22 : 0, narc = M.sat((D.depth - D.maxDepth) / 8);
       fx.exposure = 1.35 + Math.min(D.depth, 32) * 0.085;      // eyes adapt as the light fades with depth
@@ -369,6 +381,7 @@
     // put the boat somewhere (anchored), optionally with a heading
     tp(x, z, h) { const B = DB.Boat; B.group.position.x = x; B.group.position.z = z; if (h !== undefined) B.heading = h; B.u = B.vs = B.yawRate = 0; if (B.mode !== 'drive') B.dropAnchor(); G.dCam.h = B.heading; },
     dex() { return DB.Dex.toggle(); },
+    wild(key) { return !!DB.Wild.start(key, camera, G.under); },      // send the orcas ('orca') or the sperm whale ('spermWhale') past right now
     hook(key) { const F = DB.Fishing; if (F.state === 'idle') { F.lurePos.copy(F.tip).add(v1.set(-28, 0, 34)); F.lurePos.y = 0; } F.hook(key); },
     step(n, dt = 1 / 60) { for (let i = 0; i < n; i++) tick(dt); },
     state() { const F = DB.Fishing, D = DB.Dive, B = DB.Boat; return { state: G.state, drive: G.drive, boat: B.mode, kn: +(B.u * 1.944).toFixed(1), x: +B.group.position.x.toFixed(1), z: +B.group.position.z.toFixed(1), fish: F.state, T: +F.tension.toFixed(2), dist: +F.dist.toFixed(1), mode: F.fish && F.fish.mode, S: F.fish && +F.fish.S.toFixed(2), o2: +D.o2.toFixed(2), depth: +D.depth.toFixed(1), bag: D.bag.length, lock: D.lock && D.lock.name, pick: D.pick && D.pick.name, ms: +G.ms.toFixed(1), scale: DB.Q.scale }; },
@@ -450,8 +463,41 @@
       tick(1 / 60);
     }
     check('spear with aim assist hits a crossing fish at 6 m', hit, hit ? 'hit' : `no hit (lock ${D.lock && D.lock.name})`);
-    leaveWater('board'); UI.dropCatches(UI.session.length);
     for (const t of D.targets) t.pos.copy(t.home);
+
+    // --- danger: the mask edges redden as a shark closes, and clear again
+    const sh = D.sharks[0], hold = (n, fn) => { for (let i = 0; i < n; i++) { D.pos.set(6, -6, 6); D.vel.set(0, 0, 0); D.o2 = 1; fn(); tick(1 / 60); } };
+    for (const j of D.jellies) j.pos.x += 500;      // a jellyfish drifting by would redden the mask too
+    hold(60, () => { sh.state = 'approach'; sh.timer = 20; sh.orbit = 6; sh.pos.set(12, -6, 6); });      // 6 m off
+    const dApp = D.danger, fxApp = DB.Post.fx.danger;
+    hold(5, () => { sh.state = 'charge'; sh.timer = 4; sh.pos.set(40, -6, 6); });
+    const dChg = D.danger;
+    hold(240, () => { for (const o of D.sharks) { o.state = 'patrol'; o.timer = 99; } });
+    for (const j of D.jellies) j.pos.x -= 500;
+    check('red vignette: rises with a circling shark, full on a charge, clears after', dApp > 0.3 && dApp < 1 && fxApp > 0.15 && dChg === 1 && DB.Post.fx.danger < 0.03, `circling ${dApp.toFixed(2)} (screen ${fxApp.toFixed(2)}), charge ${dChg}, after ${DB.Post.fx.danger.toFixed(3)}`);
+
+    // --- crabs: still for a slow hand, off sideways when rushed
+    const crab = D.crabs[0];
+    if (crab) {
+      const near = (vx) => { for (let i = 0; i < 20; i++) { D.pos.set(crab.pos.x - 1.5, crab.pos.y + 0.6, crab.pos.z); D.vel.set(vx, 0, 0); tick(1 / 60); } };
+      near(0); const still = crab.run <= 0, x0 = crab.pos.x; near(2.4);
+      check('crab holds for a slow approach and runs from a rush', still && crab.run > 0 && Math.abs(crab.pos.x - x0) + Math.abs(crab.pos.z - crab.home.z) > 0.1, `still ${still}, ran ${Math.hypot(crab.pos.x - x0, crab.pos.z - crab.home.z).toFixed(2)} m`);
+    }
+    leaveWater('board'); UI.dropCatches(UI.session.length);
+
+    // --- the orca pod passes the boat: close but clear of the hull, blows, and is logged once it is looked at
+    let blows = 0, logged = '', dWild = 1e9; DB.on('wildBlow', () => blows++); DB.on('catch', (r) => { if (r.method === 'watch') logged = r.key; });
+    tick(1 / 60);      // back on deck first: the pass is laid out around the camera
+    if (DB.debug.wild('orca')) {
+      for (let i = 0; i < 60 * 90 && DB.Wild.pass; i++) {
+        const an = DB.Wild.pass.g.list[0].pos; DB.debug.view = { p: [B.group.position.x, 2.2, B.group.position.z], t: [an.x, an.y, an.z] };
+        tick(1 / 60); if (DB.Wild.pass) dWild = Math.min(dWild, DB.Wild.pass.near);
+      }
+      DB.debug.view = null;
+      check('orca pod passes the boat and enters the field guide', logged === 'orca' && blows >= 3 && dWild > 12 && dWild < 60 && !DB.Wild.pass, `logged ${logged || 'nothing'}, ${blows} blows, closest ${dWild.toFixed(0)} m`);
+    }
+    const blank = DB.Dex.list.filter((e) => e.img.length < 3000).map((e) => e.key);
+    check(`all ${DB.Dex.list.length} field-guide entries have a portrait`, !blank.length, blank.length ? 'missing: ' + blank.join(', ') : 'ok');
 
     // --- every sound renders (peak level only: nobody is listening)
     const pr = await DB.Audio.probe(), dead = pr.filter((p) => !p.ok);

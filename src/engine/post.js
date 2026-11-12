@@ -63,7 +63,7 @@ void main(){
 
   const FINAL = /* glsl */ `
 uniform sampler2D tScene, tBloom, tRays; uniform vec2 uRes;
-uniform float uExposure, uBloom, uUnder, uTime, uVignette, uWet, uFlash, uFade, uDamage, uCA, uSat, uBlur, uDark;
+uniform float uExposure, uBloom, uUnder, uTime, uVignette, uWet, uFlash, uFade, uDamage, uCA, uSat, uBlur, uDark, uDanger;
 varying vec2 vUv;
 ${DB.GLSL.common}
 vec3 RRTAndODTFit(vec3 v){ vec3 a = v * (v + 0.0245786) - 0.000090537; vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081; return a / b; }
@@ -105,6 +105,7 @@ void main(){
   float l = dot(col, vec3(0.2126, 0.7152, 0.0722));
   col = mix(vec3(l), col, uSat);
   col = mix(col, vec3(0.42, 0.02, 0.01) * (0.4 + l), uDamage * smoothstep(0.05, 0.6, r2 * 2.0 + uDamage * 0.3));
+  col = mix(col, vec3(0.5, 0.012, 0.008) * (0.3 + l), uDanger * smoothstep(0.08, 0.6, r2 * 1.9));      // something dangerous is close: the edges of the mask go red
   col *= 1.0 - uDark * smoothstep(0.0, 0.5, r2 * 1.6 + uDark * 0.35);     // tunnel vision (low oxygen)
   col = toSRGB(col);
   col = mix(col, vec3(0.93, 0.97, 1.0), uFlash);
@@ -114,7 +115,7 @@ void main(){
 }`;
 
   const Post = (DB.Post = {
-    fx: { exposure: 0.5, bloom: 0.05, under: 0, vignette: 0.22, wet: 0, flash: 0, fade: 0, damage: 0, ca: 0.004, sat: 1.04, blur: 0, dark: 0 },
+    fx: { exposure: 0.5, bloom: 0.05, under: 0, vignette: 0.22, wet: 0, flash: 0, fade: 0, damage: 0, ca: 0.004, sat: 1.04, blur: 0, dark: 0, danger: 0 },
     init(renderer) {
       this.renderer = renderer;
       const hf = { type: T.HalfFloatType, depthBuffer: false, minFilter: T.LinearFilter, magFilter: T.LinearFilter };
@@ -134,7 +135,7 @@ void main(){
       this.mFinal = DB.fsMat(FINAL, {
         tScene: { value: this.rtScene.texture }, tBloom: { value: this.up[0].texture }, tRays: { value: this.rtRays.texture }, uRes: { value: new T.Vector2() },
         uExposure: { value: 0.5 }, uBloom: { value: 0.05 }, uUnder: { value: 0 }, uTime: { value: 0 }, uVignette: { value: 0.2 }, uWet: { value: 0 },
-        uFlash: { value: 0 }, uFade: { value: 0 }, uDamage: { value: 0 }, uCA: { value: 0.004 }, uSat: { value: 1.04 }, uBlur: { value: 0 }, uDark: { value: 0 },
+        uFlash: { value: 0 }, uFade: { value: 0 }, uDamage: { value: 0 }, uCA: { value: 0.004 }, uSat: { value: 1.04 }, uBlur: { value: 0 }, uDark: { value: 0 }, uDanger: { value: 0 },
       });
       this.frame = 0;
     },
@@ -182,7 +183,7 @@ void main(){
       const f = this.mFinal.uniforms;
       f.uExposure.value = fx.exposure; f.uBloom.value = fx.bloom; f.uUnder.value = fx.under; f.uTime.value = time; f.uVignette.value = fx.vignette;
       f.uWet.value = fx.wet; f.uFlash.value = fx.flash; f.uFade.value = fx.fade; f.uDamage.value = fx.damage; f.uCA.value = fx.ca; f.uSat.value = fx.sat;
-      f.uBlur.value = fx.blur; f.uDark.value = fx.dark;
+      f.uBlur.value = fx.blur; f.uDark.value = fx.dark; f.uDanger.value = fx.danger;
       DB.renderFS(r, this.mFinal, null);
     },
   });

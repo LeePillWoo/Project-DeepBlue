@@ -28,6 +28,28 @@ async function get(url, key) {
 }
 const info = async (n) => JSON.parse((await get(`https://api.polyhaven.com/files/${n}`, `info_${n}.json`)).toString());
 const webp = async (buf, size, q, isNormal) => 'data:image/webp;base64,' + (await sharp(buf).resize(size, size, { fit: 'fill' }).webp({ quality: q, smartSubsample: !isNormal, effort: 5 }).toBuffer()).toString('base64');
+// atlas painted on a pure-white background: grow the painted islands outward so UV seams do not pick the background up
+async function bleedWhite(buf) {
+  const { data, info: im } = await sharp(buf).removeAlpha().raw().toBuffer({ resolveWithObject: true }), W = im.width, H = im.height, n = W * H;
+  let bad = new Uint8Array(n);
+  for (let i = 0; i < n; i++) bad[i] = data[i * 3] > 248 && data[i * 3 + 1] > 248 && data[i * 3 + 2] > 248 ? 1 : 0;
+  for (let pass = 0; pass < 2; pass++) {      // the anti-aliased rim of each island is half background too
+    const nb = bad.slice();
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) { const i = y * W + x; if (!bad[i] && (bad[i - 1] || bad[i + 1] || bad[i - W] || bad[i + W])) nb[i] = 1; }
+    bad = nb;
+  }
+  for (let pass = 0; pass < 20; pass++) {
+    const fill = [];
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const i = y * W + x; if (!bad[i]) continue;
+      let r = 0, g = 0, b = 0, c = 0;
+      for (const j of [i - 1, i + 1, i - W, i + W, i - W - 1, i - W + 1, i + W - 1, i + W + 1]) if (!bad[j]) { r += data[j * 3]; g += data[j * 3 + 1]; b += data[j * 3 + 2]; c++; }
+      if (c) fill.push(i, r / c, g / c, b / c);
+    }
+    for (let k = 0; k < fill.length; k += 4) { const i = fill[k]; data[i * 3] = fill[k + 1]; data[i * 3 + 1] = fill[k + 2]; data[i * 3 + 2] = fill[k + 3]; bad[i] = 0; }
+  }
+  return sharp(data, { raw: { width: W, height: H, channels: 3 } }).png().toBuffer();
+}
 const b64 = (a) => Buffer.from(a.buffer, a.byteOffset, a.byteLength).toString('base64');
 const r4 = (a) => a.map((x) => +x.toFixed(5));
 
@@ -73,6 +95,7 @@ const texFn = (cfg, { gl, bin, inc, id }) => async (ti, kind) => {
     if (!ent) throw new Error('missing texture ' + uri);
     buf = await get(ent.url, `${id}_${cfg.res}_${path.basename(uri)}`);
   }
+  if (cfg.bleed && kind === 'diff') buf = await bleedWhite(buf);
   return webp(buf, cfg.tex[kind], kind === 'nor' ? 86 : 80, kind === 'nor');
 };
 
@@ -87,7 +110,7 @@ async function buildMats(cfg, gl, texOf, used) {
     if (p.baseColorFactor && p.baseColorFactor.slice(0, 3).some((v) => v < 0.999)) o.color = r4(p.baseColorFactor.slice(0, 3));
     if (!o.orm) { o.rough = +(p.roughnessFactor === undefined ? 1 : p.roughnessFactor).toFixed(3); o.metalF = +mf.toFixed(3); }
     if (m.alphaMode === 'MASK') o.cut = m.alphaCutoff === undefined ? 0.5 : m.alphaCutoff;
-    if (m.alphaMode === 'BLEND') o.glass = true;
+    if (m.alphaMode === 'BLEND' && !cfg.opaque) o.glass = true;
     out.push(o);
   }
   return out;
@@ -125,11 +148,17 @@ function readPrim(gl, bin, pr) {
 }
 
 // ------------------------------------------------------------------ vertex-colour painters for untextured sculpts
-// Called after `fish` normalisation: +x head, +y up, length 1, centred on the bounding box.
+// Called after `fish` normalisation: +x head, +y up, length 1, centred on the bounding box. Colours are linear.
+const sm = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
+const mixc = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
+const hash3 = (x, y, z) => { const s = Math.sin(x * 127.1 + y * 311.7 + z * 74.7) * 43758.5453; return s - Math.floor(s); };
+function noise3(x, y, z) {      // value noise, 0..1
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), f = [x - xi, y - yi, z - zi].map((t) => t * t * (3 - 2 * t)), L = (a, b, t) => a + (b - a) * t;
+  const h = (dx, dy, dz) => hash3(xi + dx, yi + dy, zi + dz);
+  return L(L(L(h(0, 0, 0), h(1, 0, 0), f[0]), L(h(0, 1, 0), h(1, 1, 0), f[0]), f[1]), L(L(h(0, 0, 1), h(1, 0, 1), f[0]), L(h(0, 1, 1), h(1, 1, 1), f[0]), f[1]), f[2]);
+}
 const PAINT = {
   turtle(parts) {
-    const sm = (a, b, x) => { const t = Math.min(Math.max((x - a) / (b - a), 0), 1); return t * t * (3 - 2 * t); };
-    const mixc = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
     for (const p of parts) {
       const n = p.P.length / 3; p.C = new Uint8Array(n * 3);
       if (process.env.DEBUG_PAINT) {
@@ -170,6 +199,42 @@ const PAINT = {
     }
   },
   turtleShell: { cx: -0.035, rx: 0.378, rz: 0.347, rim: -0.04 },
+
+  // sperm whale: slate grey, scuffed pale around the head, white lower jaw, lighter blotches under the belly
+  spermWhale(parts) {
+    for (const p of parts) {
+      const n = p.P.length / 3; p.C = new Uint8Array(n * 3);
+      for (let i = 0; i < n; i++) {
+        const x = p.P[i * 3], y = p.P[i * 3 + 1], z = p.P[i * 3 + 2], ny = p.N[i * 3 + 1];
+        const big = noise3(x * 9, y * 9, z * 9), fine = noise3(x * 70, y * 70, z * 70), streak = noise3(x * 14, y * 90, z * 90);
+        let c = mixc([0.036, 0.04, 0.046], [0.075, 0.078, 0.082], big * 0.7 + fine * 0.3);
+        c = mixc(c, [0.16, 0.16, 0.155], sm(0.62, 0.8, streak) * sm(0.1, 0.4, x) * 0.6);             // scars from squid and rivals, mostly on the head
+        c = mixc(c, [0.3, 0.3, 0.28], sm(0.55, 0.75, big) * sm(0.1, -0.5, ny) * sm(0.3, -0.1, x) * 0.7);   // pale belly blotches
+        c = mixc(c, [0.6, 0.6, 0.56], sm(0.22, 0.3, x) * sm(-0.045, -0.075, y) * sm(0.035, 0.02, Math.abs(z)));      // the narrow underslung jaw
+        for (let k = 0; k < 3; k++) p.C[i * 3 + k] = Math.round(Math.min(Math.max(c[k], 0), 1) * 255);
+      }
+    }
+  },
+
+  // weedy seadragon: orange-red above, yellow below, violet bars on the neck, pale spots, dark leafy appendages
+  seadragon(parts) {
+    for (const p of parts) {
+      const n = p.P.length / 3; p.C = new Uint8Array(n * 3);
+      // the body's centreline: per slice along the length, the median of what is there (the trunk outnumbers the leaves)
+      const B = 40, ys = Array.from({ length: B }, () => []), zs = Array.from({ length: B }, () => []), bin = (x) => Math.min(Math.max(Math.floor((x + 0.5) * B), 0), B - 1);
+      for (let i = 0; i < n; i++) { const b = bin(p.P[i * 3]); ys[b].push(p.P[i * 3 + 1]); zs[b].push(p.P[i * 3 + 2]); }
+      const med = (a) => (a.length ? a.sort((u, v) => u - v)[a.length >> 1] : 0), cy = ys.map(med), cz = zs.map(med);
+      for (let i = 0; i < n; i++) {
+        const x = p.P[i * 3], y = p.P[i * 3 + 1], z = p.P[i * 3 + 2], ny = p.N[i * 3 + 1], b = bin(x);
+        const off = Math.hypot(y - cy[b], z - cz[b]), leaf = sm(0.035, 0.075, off);
+        let c = mixc([0.5, 0.16, 0.045], [0.62, 0.42, 0.08], sm(0.3, -0.5, ny));
+        c = mixc(c, [0.16, 0.05, 0.3], sm(0.55, 0.9, Math.sin(x * 95)) * sm(-0.05, 0.1, x) * sm(0.38, 0.3, x) * 0.85);      // violet bars behind the head
+        c = mixc(c, [0.85, 0.75, 0.4], sm(0.7, 0.8, noise3(x * 150, y * 150, z * 150)) * 0.8);                                   // spots
+        c = mixc(c, mixc([0.09, 0.05, 0.11], [0.22, 0.2, 0.05], noise3(x * 40, y * 40, z * 40)), leaf);
+        for (let k = 0; k < 3; k++) p.C[i * 3 + k] = Math.round(Math.min(Math.max(c[k], 0), 1) * 255);
+      }
+    }
+  },
 };
 
 // ------------------------------------------------------------------ static models
@@ -398,7 +463,7 @@ function writeCredits() {
   const use = (file, name) => { if (file) used.set(file, [...(used.get(file) || []), name]); };
   for (const m of [...MODELS, ...CHARS]) { use(m.from || m.glb, m.name); for (const c of m.clips || []) if (c.from) use(c.from, `${m.name}:${c.name} 애니메이션`); }
   const rows = [...used.entries()].map(([file, names]) => ({ file, names, c: cred[file] }));
-  const line = (r) => `- **${r.c ? r.c.title : r.file}** — ${r.c ? r.c.by : '?'}${r.c && r.c.uid ? ` · [Fab](https://www.fab.com/listings/${r.c.uid})` : ''} · \`${r.names.join('`, `')}\``;
+  const line = (r) => `- **${r.c ? r.c.title : r.file}** — ${r.c ? r.c.by : '?'}${r.c && r.c.uid ? ` · [Fab](https://www.fab.com/listings/${r.c.uid})` : ''}${r.c && /Personal/.test(r.c.license) ? ' · Personal 등급(무료)' : ''} · \`${r.names.join('`, `')}\``;
   const isMega = (r) => r.c && /megascans/i.test(r.c.by), isBy = (r) => r.c && /CC-BY/i.test(r.c.license) && !isMega(r);
   const ph = [...new Set(MODELS.filter((m) => !localFile(m)).map((m) => m.ph || m.name).concat(TEXTURES.map((t) => t.name)))];
   const md = `# 에셋 출처 (Credits)
@@ -414,6 +479,8 @@ ${rows.filter(isBy).map(line).join('\n')}
 ${rows.filter(isMega).map(line).join('\n')}
 
 ## Fab — 그 외 무료 (Fab Standard License)
+
+Personal 등급으로 받은 것은 개인·연 매출 10만 달러 이하 팀의 사용 조건입니다.
 
 ${rows.filter((r) => !isBy(r) && !isMega(r)).map(line).join('\n') || '- 없음'}
 

@@ -10,6 +10,7 @@
 //   merge  one part per material             skip / only   regex on node names
 //   unit   scale factor to metres            rot [x,y,z]   euler applied before packing
 //   fish   normalise to the game's creature space (+x snout, +y dorsal, length 1); axes/signs pick the source axes
+//   opaque ignore alpha blending in the source material     bleed   the atlas background is pure white: pad the painted islands over it
 //   metal  use the metalness channel         paint   name of a vertex-colour painter in build_assets.mjs (untextured sculpts)
 const T2 = { diff: 1024, nor: 1024, orm: 512 }, T1 = { diff: 512, nor: 512, orm: 256 }, TS = { diff: 512, nor: 256, orm: 256 }, TB = { diff: 1024, nor: 512, orm: 256 };
 
@@ -18,6 +19,7 @@ export const PACKS = {
   reef: 'Poly Haven (CC0) — 수중 바위·난파선·해저 텍스처',
   fab: 'Fab — Quixel Megascans(Standard License) 산호·바위 + CC-BY 어류·거북·보물상자',
   sea: 'Fab(Megascans·CC-BY) + Poly Haven — 해상 섬·등대·다른 배',
+  life: 'Fab — 바다 생물: 상어·고래·게·갯민숭달팽이 등 (CC-BY, Fab Standard License 무료 등급)',
   chars: 'Fab CC-BY — 스키닝 캐릭터와 애니메이션',
 };
 
@@ -51,6 +53,15 @@ export const MODELS = [
   { name: 'fab_shark', out: 'fab', glb: 'shark.glb', fish: true, axes: [0, 1, 2], signs: [-1, 1, -1], tex: T2 },
   { name: 'fab_turtle', out: 'fab', prep: 'turtle.glb', from: 'turtle.glb', fish: true, axes: [0, 1, 2], signs: [1, 1, 1], paint: 'turtle' },
   { name: 'fab_chest', out: 'fab', glb: 'treasure_chest.glb', merge: true, metal: true, tex: TS },
+  // ---- life: more animals. Rigged models are used in their bind pose; the swim comes from the vertex shader.
+  { name: 'fab_orca', out: 'life', glb: 'orca4.glb', fish: true, axes: [1, 2, 0], signs: [-1, 1, -1], bleed: true, tex: TB },
+  { name: 'fab_spermwhale', out: 'life', prep: 'sperm_whale.glb', from: 'sperm_whale_007.blend', fish: true, axes: [1, 2, 0], signs: [-1, 1, -1], paint: 'spermWhale' },
+  { name: 'fab_greatwhite', out: 'life', prep: 'great_white.glb', from: 'shark_low_poly.glb', fish: true, skip: /EYES/, merge: true, tex: T2 },
+  { name: 'fab_pyjama', out: 'life', glb: 'pyjama_shark_endangered_free.glb', fish: true, axes: [1, 2, 0], signs: [1, -1, -1], tex: T1 },
+  { name: 'fab_mullet', out: 'life', glb: 'animated_low_poly_fish.glb', fish: true, axes: [1, 2, 0], signs: [1, 1, 1], tex: TS },
+  { name: 'fab_crab', out: 'life', glb: 'blue_crab.glb', fish: true, tex: T1 },
+  { name: 'fab_seaslug', out: 'life', prep: 'sea_slug.glb', from: 'sea_slug_chromodoris_annae.glb', fish: true, axes: [1, 2, 0], signs: [1, 1, 1], merge: true, opaque: true, tex: TS },
+  { name: 'fab_seadragon', out: 'life', prep: 'seadragon.glb', from: 'day67_weedy_seadragon.glb', fish: true, axes: [2, 1, 0], signs: [1, 1, 1], paint: 'seadragon' },
   // ---- sea: what you see from the deck
   { name: 'cliff_a', out: 'sea', glb: 'massive_nordic_coastal_cliff_vdssailfa_mid.glb', tex: { diff: 2048, nor: 1024, orm: 512 } },
   { name: 'cliff_b', out: 'sea', glb: 'huge_nordic_coastal_cliff_venrdcgga_mid.glb', tex: TB },

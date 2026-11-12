@@ -192,7 +192,7 @@
 
     // records a catch / find / sighting. method: rod | spear | chase | hand | watch. returns { pts, record, first }
     addCatch(rec) {
-      const sp = DB.Species[rec.key], pts = Math.round(rec.kg * sp.score * (rec.method === 'chase' ? 1.5 : 1));
+      const sp = DB.Species[rec.key], pts = sp.pts || Math.round(rec.kg * sp.score * (rec.method === 'chase' ? 1.5 : 1));
       const b = this.log.best[rec.key] || (this.log.best[rec.key] = { n: 0, L: 0, kg: 0 });
       const first = b.n === 0, record = rec.kg > b.kg && b.n > 0, prev = JSON.parse(JSON.stringify(b)), wasNew = DB.Dex ? DB.Dex.fresh.has(rec.key) : false;
       b.n++; b.L = Math.max(b.L, rec.L); b.kg = Math.max(b.kg, rec.kg);

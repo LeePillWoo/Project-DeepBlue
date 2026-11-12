@@ -8,6 +8,7 @@
 - **Shark** — Optic Idealist · [Fab](https://www.fab.com/listings/24d6dc8f-7a25-4252-b7d3-c46f01c02b04) · `fab_shark`
 - **Turtle** — Forge of Fantasy · [Fab](https://www.fab.com/listings/aab6ba52-b725-4b90-9f30-198fbd04b6f2) · `fab_turtle`
 - **Treasure Chest** — GG Beta Pie · [Fab](https://www.fab.com/listings/e3f0dd88-fc48-44fc-9982-c37c98a3c11c) · `fab_chest`
+- **Day#67: Weedy Seadragon** — JuanG3D · [Fab](https://www.fab.com/listings/040549a1-e281-46f2-b564-525776941598) · `fab_seadragon`
 - **Lighthouse** — DylanHayes · [Fab](https://www.fab.com/listings/42454f1c-67a2-4460-bd41-741aeb6ecf3f) · `lighthouse`
 - **Plant Series – Palm Tree** — UPWARD · [Fab](https://www.fab.com/listings/0f9f40f9-e23b-4057-8525-f8651976f252) · `palm`
 - **Fishing Boat** — Charlie catling · [Fab](https://www.fab.com/listings/ecef8ba7-5115-4b72-a908-2c088caaca9b) · `npc_boat_aberdeen`
@@ -38,6 +39,15 @@
 
 ## Fab — 그 외 무료 (Fab Standard License)
 
+Personal 등급으로 받은 것은 개인·연 매출 10만 달러 이하 팀의 사용 조건입니다.
+
+- **Orca 4** — 5puj47980xk · [Fab](https://www.fab.com/listings/b746b5fd-21b6-4ace-9ec2-497b8aba1b5c) · Personal 등급(무료) · `fab_orca`
+- **Sperm Whale 7** — 5puj47980xk · [Fab](https://www.fab.com/listings/d8e663fb-1407-4997-9124-28a461792ab4) · Personal 등급(무료) · `fab_spermwhale`
+- **Shark low poly** — Agher · [Fab](https://www.fab.com/listings/6b300cce-72fc-4951-a4c2-38057920e805) · `fab_greatwhite`
+- **Pyjama Shark (Endangered) Free** — Nyi Nyi Tun · [Fab](https://www.fab.com/listings/97668cf2-0348-4ba4-9282-03607e08dd66) · `fab_pyjama`
+- **Animated Low poly Fish** — Oliver Cooke · [Fab](https://www.fab.com/listings/b99b6056-f756-4e3d-891b-3d6f9867d3ba) · `fab_mullet`
+- **Blue Crab Rig** — Kirene · [Fab](https://www.fab.com/listings/1052db15-4f9a-4015-b5db-7af049ef688e) · Personal 등급(무료) · `fab_crab`
+- **Sea Slug — Chromodoris Annae** — Nestaeric · [Fab](https://www.fab.com/listings/585518c0-414f-45b3-9752-c941e2b3f24b) · Personal 등급(무료) · `fab_seaslug`
 - **Fishing Boat** — Duong Tr · [Fab](https://www.fab.com/listings/82fcb7f5-4005-43de-bbed-a72d31306619) · `npc_boat_wood`
 
 ## Poly Haven — CC0

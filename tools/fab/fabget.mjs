@@ -1,13 +1,14 @@
 // Batch-download FREE Fab listings through the Chrome you are logged in to (see fabfind.mjs for how to start it).
 //   node fabget.mjs ../../raw/fab uid[=regex] uid[=regex] ...
 // Picks the converted .glb (Megascans: *_mid.glb) unless a regex is given, and records title / author / licence in <dest>/credits.json
-// (tools/build_assets.mjs turns that into CREDITS.md). It only presses "Download": listings that need a licence to be chosen
-// ("Buy now", even at 0 won) are reported and left alone — acquire those yourself if their licence suits you.
+// (tools/build_assets.mjs turns that into CREDITS.md). It only presses "Download". Listings sold in tiers ("Select a License")
+// are left alone unless PERSONAL=1 is set: then the Personal tier is chosen, and only when the menu shows it as Free —
+// that tier is for individuals / teams under $100k a year. Nothing is ever bought.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 const [dest, ...items] = process.argv.slice(2);
-const DL = path.join(os.homedir(), 'Downloads');
+const DL = path.join(os.homedir(), 'Downloads'), PERSONAL = process.env.PERSONAL === '1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const list = await (await fetch('http://127.0.0.1:9333/json/list')).json();
 const page = list.find((t) => t.type === 'page' && /fab\.com/.test(t.url)) || list.find((t) => t.type === 'page');
@@ -24,11 +25,22 @@ for (const it of items) {
   const [uid, rx] = it.split('=');
   try {
     await send('Page.navigate', { url: 'https://www.fab.com/listings/' + uid });
-    let ok = false;
-    for (let i = 0; i < 40 && !ok; i++) { await sleep(500); ok = await ev(`!![...document.querySelectorAll('button')].find(b=>b.innerText.trim()==='Download')`).catch(() => false); }
+    const hasDl = `!![...document.querySelectorAll('button')].find(b=>b.innerText.trim()==='Download')`;
+    let ok = false, personal = false;
+    for (let i = 0; i < 40 && !ok; i++) {
+      await sleep(500); ok = await ev(hasDl).catch(() => false);
+      // tiered listing: open the licence menu and take the Personal tier, but only where the menu itself says it is free
+      if (!ok && i > 6 && !personal && PERSONAL) {
+        const picked = await ev(`(async()=>{const b=[...document.querySelectorAll('button')].find(b=>/Select a License/.test(b.innerText));if(!b)return'';b.click();await new Promise(r=>setTimeout(r,900));
+          const o=[...document.querySelectorAll('[role=option]')].find(e=>/^Personal/.test(e.innerText.trim()));if(!o)return'';const t=o.innerText.trim().replace(/\\s+/g,' ');if(!/ Free$/.test(t))return'PAID '+t.slice(-40);o.click();return'ok'})()`).catch(() => '');
+        if (/^PAID/.test(picked)) { console.log('SKIP personal tier is not free', uid, picked); break; }
+        personal = picked === 'ok';
+      }
+    }
     if (!ok) { console.log('FAIL no Download button', uid); continue; }
     const meta = await ev(`fetch('/i/listings/${uid}',{headers:{accept:'application/json'}}).then(r=>r.json()).then(j=>({title:j.title,by:j.user&&j.user.sellerName,lic:(j.licenses||[]).map(l=>l.name).join('/'),free:j.isFree,price:j.startingPrice&&j.startingPrice.price}))`);
     if (meta.free === false || (meta.price && meta.price > 0)) { console.log('SKIP not free', uid, JSON.stringify(meta)); continue; }
+    if (personal) meta.lic = 'Fab Standard License — Personal (free tier)';
     await ev(`[...document.querySelectorAll('button')].find(b=>b.innerText.trim()==='Download').click()`);
     let names = [];
     for (let i = 0; i < 30 && !names.length; i++) {

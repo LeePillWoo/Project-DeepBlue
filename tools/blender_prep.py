@@ -1,5 +1,5 @@
-# Decimate a heavy GLB down to a triangle budget (dev-time only).
-#   blender -b --python blender_prep.py -- in.glb out.glb <target_tris> [join] [weld] [keep=<min tris kept per mesh>]
+# Decimate a heavy GLB (or convert + decimate an FBX) down to a triangle budget (dev-time only).
+#   blender -b --python blender_prep.py -- in.glb|in.fbx|in.blend out.glb <target_tris> [join] [weld] [keep=<min tris kept per mesh>]
 # join: merge every mesh into one object per material set first (needed for sculpts split into chunks)
 # weld: merge duplicate vertices first (unindexed scans decimate badly otherwise)
 import bpy, sys
@@ -10,7 +10,12 @@ opts = argv[3:]
 keep = next((int(o[5:]) for o in opts if o.startswith('keep=')), 600)
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
-bpy.ops.import_scene.gltf(filepath=src)
+if src.lower().endswith('.blend'):
+    bpy.ops.wm.open_mainfile(filepath=src)
+elif src.lower().endswith('.fbx'):
+    bpy.ops.import_scene.fbx(filepath=src)
+else:
+    bpy.ops.import_scene.gltf(filepath=src)
 meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH']
 
 def tris(o):

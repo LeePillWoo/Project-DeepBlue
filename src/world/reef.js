@@ -43,7 +43,11 @@ void main(){
   #else
   float ph = uSwim.x; float amp = 1.0;
   #endif
+  #ifdef SWIM_V
+  p.y += swimOff(position.x, ph) * amp; n.x -= swimSlope(position.x, ph) * n.y * amp; n = normalize(n);
+  #else
   p.z += swimOff(position.x, ph) * amp; n.x -= swimSlope(position.x, ph) * n.z * amp; n = normalize(n);
+  #endif
 #endif
 #ifdef FLAP
   {     // sea turtle (+x = head): the flippers are whatever sticks out sideways from the shell ellipse
@@ -161,7 +165,7 @@ void main(){
 
   const UW = (DB.UW = {
     torch: torchU,
-    // o: { map, normalMap, normalFlip, color, vertexColors, uv, detail, detailScale, silver, swim, instPhase, sway:[amp,h], alphaTest, side, tint, emis, flap, octo, terrain:{...} }
+    // o: { map, normalMap, normalFlip, color, vertexColors, uv, detail, detailScale, silver, swim, swimV, instPhase, sway:[amp,h], alphaTest, side, tint, emis, flap, octo, terrain:{...} }
     material(o = {}) {
       const defines = {};
       if (o.map) defines.USE_MAP = 1;
@@ -169,6 +173,7 @@ void main(){
       if (o.detail) defines.USE_DETAIL = 1;
       if (o.silver) defines.SILVER = 1;
       if (o.swim) defines.SWIM = 1;
+      if (o.swimV) defines.SWIM_V = 1;
       if (o.instPhase) defines.INST_PHASE = 1;
       if (o.sway) defines.SWAY = 1;
       if (o.terrain) defines.TERRAIN = 1;

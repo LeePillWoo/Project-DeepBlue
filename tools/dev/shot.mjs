@@ -1,7 +1,7 @@
 // Headless-Chrome driver over CDP (no deps) — how the game is checked without a person at the keyboard.
 // It runs Chrome on the real GPU, so screenshots show what a player sees. Usage (steps run in order):
 //   node shot.mjs "size=1600x900" "url=file:///F:/…/index.html?autostart" "w=15000" "e=DB.debug.drive(true)" "w=3000" "s=drive.jpg"
-//   url= navigate · w= wait ms · e= evaluate JS (prints the value) · s= screenshot into ./shots/ · key=KeyF[:down|up] · mouse=down|up|click[:right]
+//   url= navigate · w= wait ms · e= evaluate JS (prints the value) · ef= evaluate a JS file · s= screenshot into ./shots/ · key=KeyF[:down|up] · mouse=down|up|click[:right]
 // Game hooks: ?autostart, ?selftest (→ DB.selftestResult), DB.debug.{cam, key, mouse, drive, tp, dive, board, hook, dex, step, state, view}
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
@@ -69,8 +69,8 @@ try {
     const eq = s.indexOf('='); const k = eq < 0 ? s : s.slice(0, eq); const v = eq < 0 ? '' : s.slice(eq + 1);
     if (k === 'url') { await send('Page.navigate', { url: v }); await sleep(300); }
     else if (k === 'w') { await sleep(Number(v)); }
-    else if (k === 'e') {
-      const r = await send('Runtime.evaluate', { expression: v, awaitPromise: true, returnByValue: true });
+    else if (k === 'e' || k === 'ef') {
+      const r = await send('Runtime.evaluate', { expression: k === 'ef' ? fs.readFileSync(v, 'utf8') : v, awaitPromise: true, returnByValue: true });
       if (r.exceptionDetails) { console.log('EVAL ERROR:', r.exceptionDetails.text, r.exceptionDetails.exception && r.exceptionDetails.exception.description); exitCode = 2; }
       else console.log('=>', typeof r.result.value === 'object' ? JSON.stringify(r.result.value) : r.result.value);
     }

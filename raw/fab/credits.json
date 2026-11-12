@@ -202,5 +202,59 @@
   "title": "Shark",
   "by": "Optic Idealist",
   "license": "CC-BY"
+ },
+ "pyjama_shark_endangered_free.glb": {
+  "uid": "97668cf2-0348-4ba4-9282-03607e08dd66",
+  "title": "Pyjama Shark (Endangered) Free",
+  "by": "Nyi Nyi Tun",
+  "license": "개인용/기업용"
+ },
+ "shark_low_poly.glb": {
+  "uid": "6b300cce-72fc-4951-a4c2-38057920e805",
+  "title": "Shark low poly",
+  "by": "Agher",
+  "license": "개인용/기업용"
+ },
+ "tiburon_torpedo.glb": {
+  "uid": "4caf726b-9901-4b94-8d6d-a74229c549f3",
+  "title": "Animal - Tiburón Torpedo",
+  "by": "Centauro5legs",
+  "license": "CC-BY"
+ },
+ "day67_weedy_seadragon.glb": {
+  "uid": "040549a1-e281-46f2-b564-525776941598",
+  "title": "Day#67: Weedy Seadragon",
+  "by": "JuanG3D",
+  "license": "CC-BY"
+ },
+ "animated_low_poly_fish.glb": {
+  "uid": "b99b6056-f756-4e3d-891b-3d6f9867d3ba",
+  "title": "Animated Low poly Fish",
+  "by": "Oliver Cooke",
+  "license": "개인용/기업용"
+ },
+ "orca4.glb": {
+  "uid": "b746b5fd-21b6-4ace-9ec2-497b8aba1b5c",
+  "title": "Orca 4",
+  "by": "5puj47980xk",
+  "license": "Fab Standard License — Personal (free tier)"
+ },
+ "blue_crab.glb": {
+  "uid": "1052db15-4f9a-4015-b5db-7af049ef688e",
+  "title": "Blue Crab Rig",
+  "by": "Kirene",
+  "license": "Fab Standard License — Personal (free tier)"
+ },
+ "sea_slug_chromodoris_annae.glb": {
+  "uid": "585518c0-414f-45b3-9752-c941e2b3f24b",
+  "title": "Sea Slug — Chromodoris Annae",
+  "by": "Nestaeric",
+  "license": "Fab Standard License — Personal (free tier)"
+ },
+ "sperm_whale_007.blend": {
+  "uid": "d8e663fb-1407-4997-9124-28a461792ab4",
+  "title": "Sperm Whale 7",
+  "by": "5puj47980xk",
+  "license": "Fab Standard License — Personal (free tier)"
  }
 }

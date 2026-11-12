@@ -190,6 +190,19 @@
     turtle: { name: '푸른바다거북', en: 'Green Sea Turtle', L: [0.9, 1.35], wK: 62, score: 2, watch: true },
   });
   SP.shark.watch = true; SP.shark.score = 1;
+  // real models (assets/fab.js, assets/life.js), already in fish space. `real` names the packed model; species without a
+  // `prof` exist only when their pack is loaded (Fish.has). pts: flat score for a sighting. swimV: tail beats up and down.
+  SP.tuna.real = 'fab_tuna'; SP.shark.real = 'fab_shark';
+  Object.assign(SP, {
+    greatWhite: { name: '백상아리', en: 'Great White Shark', L: [3.9, 4.7], wK: 10, score: 1, watch: true, real: 'fab_greatwhite' },
+    pyjama: { name: '파자마상어', en: 'Pyjama Shark', L: [0.75, 1.0], wK: 7, pts: 180, watch: true, real: 'fab_pyjama' },
+    orca: { name: '범고래', en: 'Orca', L: [4.2, 7.2], wK: 13, pts: 800, watch: true, real: 'fab_orca', swimV: true },
+    spermWhale: { name: '향유고래', en: 'Sperm Whale', L: [13, 15], wK: 9, pts: 1500, watch: true, real: 'fab_spermwhale', swimV: true },
+    mullet: { name: '숭어', en: 'Grey Mullet', L: [0.3, 0.48], wK: 12, score: 26, spear: true, school: true, real: 'fab_mullet' },
+    seadragon: { name: '나뭇잎해룡', en: 'Weedy Seadragon', L: [0.3, 0.45], wK: 2.5, pts: 350, watch: true, real: 'fab_seadragon' },
+    crab: { name: '청게', en: 'Blue Crab', L: [0.22, 0.34], wK: 14, score: 260, hand: true },      // L = leg span
+    nudibranch: { name: '갯민숭달팽이', en: 'Nudibranch', L: [0.07, 0.11], wK: 30, pts: 150, watch: true },
+  });
   for (const k in SP) SP[k].key = k;
 
   function profAt(sp, u) {
@@ -310,16 +323,18 @@ float swimSlope(float x, float ph){ return (swimOff(x + 0.01, ph) - swimOff(x - 
 `;
 
   const cache = {};
-  const REAL = { tuna: 'fab_tuna', shark: 'fab_shark' };      // species with a real model in assets/fab.js
   const Fish = (DB.Fish = {
     SWIM, profAt,
+    // can this species be built? (procedural ones always; the others need their pack)
+    has(key) { const sp = SP[key]; return !!sp && (!!sp.prof || (!!sp.real && DB.Assets.has(sp.real))); },
+    // { geo, tex, nor, col }. tex is null and col true for models that carry vertex colours instead of a texture
     get(key, lod = false) {
       const id = key + (lod ? '_lod' : '');
-      const real = REAL[key], A = DB.Assets;
+      const real = SP[key].real, A = DB.Assets;
       if (!cache[id] && real && A.has(real)) {     // scanned/modelled asset from Fab, already in fish space (+x snout, length 1)
-        const m = A.maps(real, A.parts(real)[0].mat), geo = A.geo(real, 0).clone();
+        const part = A.parts(real)[0], m = A.maps(real, part.mat), geo = A.geo(real, 0).clone();
         geo.computeBoundingSphere(); geo.boundingSphere.radius *= 1.25;
-        cache[id] = { geo, tex: m.map, nor: m.normalMap };
+        cache[id] = { geo, tex: m.map, nor: m.normalMap, col: !!part.col };
       }
       if (!cache[id]) cache[id] = { geo: buildGeo(SP[key], lod), tex: (cache[key] && cache[key].tex) || paint(SP[key]) };
       return cache[id];
@@ -331,14 +346,14 @@ float swimSlope(float x, float ph){ return (swimOff(x + 0.01, ph) - swimOff(x - 
     },
     // PBR material for fish seen from the boat. Submerged fragments write alpha < 1 so the ocean surface blends over them.
     surfaceMaterial(key) {
-      const { tex } = this.get(key);
-      const m = new T.MeshPhysicalMaterial({ map: tex, roughness: 0.3, metalness: 0.28, clearcoat: 1, clearcoatRoughness: 0.12, side: T.DoubleSide });
+      const { tex, col } = this.get(key), ax = SP[key].swimV ? 'y' : 'z';      // whales and dolphins beat the tail up and down
+      const m = new T.MeshPhysicalMaterial({ map: tex, vertexColors: !!col, roughness: 0.3, metalness: tex ? 0.28 : 0.05, clearcoat: 1, clearcoatRoughness: 0.12, side: T.DoubleSide });
       const u = (m.userData.u = { uSwim: { value: new T.Vector4(0, 1, 0, 0) }, uWaterY: { value: 0 }, uSeaCol: { value: DB.Env.seaColor } });
       m.onBeforeCompile = (sh) => {
         Object.assign(sh.uniforms, u);
         sh.vertexShader = SWIM + 'varying float vWorldY;\n' + sh.vertexShader
-          .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = vec3(normal); objectNormal.x -= swimSlope(position.x, uSwim.x) * objectNormal.z; objectNormal = normalize(objectNormal);')
-          .replace('#include <begin_vertex>', 'vec3 transformed = vec3(position); transformed.z += swimOff(position.x, uSwim.x);')
+          .replace('#include <beginnormal_vertex>', `vec3 objectNormal = vec3(normal); objectNormal.x -= swimSlope(position.x, uSwim.x) * objectNormal.${ax}; objectNormal = normalize(objectNormal);`)
+          .replace('#include <begin_vertex>', `vec3 transformed = vec3(position); transformed.${ax} += swimOff(position.x, uSwim.x);`)
           .replace('#include <project_vertex>', '#include <project_vertex>\n vWorldY = (modelMatrix * vec4(transformed, 1.0)).y;');
         sh.fragmentShader = 'uniform float uWaterY; uniform vec3 uSeaCol; varying float vWorldY;\n' + sh.fragmentShader
           .replace('#include <dithering_fragment>', `#include <dithering_fragment>
