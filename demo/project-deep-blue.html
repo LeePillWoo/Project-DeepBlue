@@ -1,0 +1,188 @@
+<title>Project Deep Blue</title>
+<style>
+  :root { --hl: #5bc0be; --panel: rgba(7, 14, 24, 0.5); --line: rgba(255, 255, 255, 0.17); --txt: #f3f7fb; --warn: #ff8a3a; --bad: #ff4a3a; color-scheme: dark; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #02060c; overflow: hidden; color: var(--txt); font-family: Bahnschrift, 'Segoe UI', 'Malgun Gothic', sans-serif; user-select: none; -webkit-user-select: none; }
+  canvas#view { display: block; width: 100%; height: 100%; }
+  #hud, #title, #pause, #loading { position: fixed; inset: 0; }
+  #hud { pointer-events: none; opacity: 0; transition: opacity 0.6s; }
+  #hud.on { opacity: 1; }
+  .glass { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; backdrop-filter: blur(7px); -webkit-backdrop-filter: blur(7px); }
+  #mode { position: absolute; left: 18px; top: 14px; padding: 8px 15px 7px; font-size: 20px; letter-spacing: 0.2px; }
+  #stat { position: absolute; right: 18px; top: 14px; padding: 8px 14px 7px; font-size: 12px; letter-spacing: 1.4px; text-align: right; }
+  #stat b { color: var(--hl); font-weight: 600; font-size: 15px; letter-spacing: 0.4px; margin-left: 3px; }
+  .gauge { position: absolute; padding: 10px 14px 10px; font-size: 11.5px; letter-spacing: 1.6px; display: none; }
+  .gauge .row { display: flex; align-items: center; gap: 10px; height: 19px; }
+  .gauge .lab { width: 74px; opacity: 0.92; }
+  .bar { position: relative; flex: 1; height: 6px; background: rgba(255, 255, 255, 0.16); border-radius: 3px; overflow: hidden; }
+  .bar i { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: var(--hl); border-radius: 3px; transition: background 0.2s; }
+  .bar .zone { position: absolute; top: 0; bottom: 0; left: 30%; width: 56%; border-left: 1px solid rgba(255, 255, 255, 0.5); border-right: 1px solid rgba(255, 255, 255, 0.5); }
+  .val { font-size: 15px; letter-spacing: 0.4px; font-variant-numeric: tabular-nums; }
+  #fishHud { left: 22px; bottom: 26px; width: 262px; }
+  #driveHud { left: 22px; bottom: 26px; width: 262px; }
+  #driveHud .big { font-size: 34px; font-weight: 600; letter-spacing: 0; line-height: 1; font-variant-numeric: tabular-nums; }
+  #driveHud .unit { font-size: 12px; letter-spacing: 1.6px; opacity: 0.8; margin-left: 6px; }
+  #driveHud .row.top { height: 40px; align-items: baseline; justify-content: space-between; }
+  #diveHud { left: 50%; bottom: 22px; transform: translateX(-50%); width: 430px; }
+  #diveHud .row { gap: 9px; }
+  #diveHud .lab { width: auto; }
+  /* minimap: a plain canvas (block, so no inline gap under it) + range / bearing line */
+  #miniBox { position: absolute; right: 18px; top: 58px; width: 196px; padding: 7px 7px 5px; }
+  #mini { display: block; inline-size: 180px; block-size: 180px; border-radius: 50%; }
+  #miniLab { margin-top: 4px; font: 11.5px 'Malgun Gothic', sans-serif; letter-spacing: 0.4px; text-align: center; opacity: 0.9; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  #cross { position: absolute; left: 50%; top: 50%; width: 22px; height: 22px; margin: -11px 0 0 -11px; border: 1.5px solid rgba(255, 255, 255, 0.55); border-radius: 50%; display: none; transition: border-color 0.12s, transform 0.12s; }
+  #cross::after { content: ''; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px; background: #fff; border-radius: 50%; }
+  #cross.empty { border-color: rgba(255, 255, 255, 0.2); border-style: dashed; }
+  #cross.lock { border: 2.5px solid #a8ff5a; transform: scale(1.5); box-shadow: 0 0 12px rgba(168, 255, 90, 0.85), inset 0 0 6px rgba(168, 255, 90, 0.5); }
+  #cross.lock::after { background: #a8ff5a; }
+  #lockLab { position: absolute; left: 50%; top: calc(50% + 24px); transform: translateX(-50%); font: 600 13px 'Malgun Gothic', sans-serif; letter-spacing: 0.5px; color: #d9ffb0; text-shadow: 0 1px 6px rgba(0, 0, 0, 0.95), 0 0 2px #000; white-space: nowrap; display: none; }
+  #prompt { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 8px 16px; font-size: 15px; display: none; white-space: nowrap; font-family: 'Malgun Gothic', sans-serif; }
+  kbd { display: inline-block; min-width: 24px; padding: 1px 7px 2px; margin: 0 5px 0 2px; border: 1px solid rgba(255, 255, 255, 0.6); border-radius: 4px; font: 600 13px Bahnschrift, 'Segoe UI', 'Malgun Gothic', sans-serif; text-align: center; background: rgba(255, 255, 255, 0.1); }
+  #hint { position: absolute; left: 50%; top: 63%; transform: translateX(-50%); font: 700 27px 'Malgun Gothic', sans-serif; letter-spacing: 1px; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.75), 0 0 2px rgba(0, 0, 0, 0.8); white-space: nowrap; opacity: 0; transition: opacity 0.18s; text-align: center; }
+  #hint.on { opacity: 1; }
+  #hint small { display: block; font-size: 14px; font-weight: 400; letter-spacing: 0.4px; opacity: 0.92; margin-top: 3px; }
+  #toasts { position: absolute; left: 50%; top: 66px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 7px; }
+  .toast { padding: 8px 18px; font: 15px 'Malgun Gothic', sans-serif; animation: tin 0.25s ease-out; transition: opacity 0.5s; white-space: nowrap; }
+  .toast.warn { border-color: var(--warn); color: #ffd9bd; }
+  .toast.bad { border-color: var(--bad); color: #ffc9c2; }
+  .toast.good { border-color: var(--hl); color: #d5fffb; }
+  @keyframes tin { from { opacity: 0; transform: translateY(-8px); } }
+  #alert { position: absolute; left: 50%; top: 22%; transform: translateX(-50%); padding: 7px 18px; font: 600 16px 'Malgun Gothic', sans-serif; letter-spacing: 1px; color: #ffd0c8; border-color: var(--bad); display: none; animation: blink 0.7s infinite alternate; }
+  @keyframes blink { to { opacity: 0.45; } }
+  .mk { position: absolute; left: 0; top: 0; font: 12px 'Malgun Gothic', sans-serif; letter-spacing: 0.6px; padding: 3px 9px; display: none; white-space: nowrap; border-color: var(--hl); color: #d5fffb; }
+  #boatMk { border-color: rgba(255, 255, 255, 0.6); color: #fff; }
+  #card { position: absolute; right: 6%; top: 50%; transform: translateY(-50%); width: 330px; padding: 20px 24px 18px; display: none; animation: tin 0.35s ease-out; }
+  #card .sp { font: 700 34px 'Malgun Gothic', sans-serif; letter-spacing: 1px; }
+  #card .en { font-size: 12px; letter-spacing: 3.2px; text-transform: uppercase; color: var(--hl); margin: 2px 0 14px; }
+  #card .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; border-top: 1px solid var(--line); padding-top: 12px; }
+  #card .grid span { display: block; font-size: 10.5px; letter-spacing: 1.6px; opacity: 0.75; }
+  #card .grid b { font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  #card .badge { display: none; margin-top: 12px; padding: 4px 10px; border: 1px solid var(--hl); border-radius: 4px; color: var(--hl); font-size: 12px; letter-spacing: 2px; width: fit-content; }
+  #card .go { margin-top: 12px; font: 12px 'Malgun Gothic', sans-serif; opacity: 0.7; }
+  /* field guide (도감): a non-modal <dialog> — the game keeps pointer lock and key focus; Tab toggles it */
+  #dex { position: fixed; inset: 0; margin: auto; inline-size: min(1480px, 95vw); max-block-size: 93dvb; padding: 20px 24px 16px; color: var(--txt); background: rgba(5, 12, 22, 0.86); border: 1px solid var(--line); border-radius: 8px; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); overflow-y: auto; scrollbar-gutter: stable; overscroll-behavior: contain; z-index: 5; }
+  #dex:focus-visible { outline: none; }
+  #dex header { display: flex; align-items: baseline; gap: 18px; margin-bottom: 12px; }
+  #dex h2 { margin: 0; font: 700 26px 'Malgun Gothic', sans-serif; letter-spacing: 4px; }
+  #dex h2 small { font: 600 12px Bahnschrift, 'Segoe UI', sans-serif; letter-spacing: 3px; color: var(--hl); margin-left: 10px; }
+  #dexSub { font: 13px 'Malgun Gothic', sans-serif; opacity: 0.8; letter-spacing: 0.4px; }
+  #dex header kbd { margin-left: auto; }
+  #dexGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(186px, 1fr)); grid-auto-rows: auto auto 1fr; gap: 10px; }
+  .dexcard { grid-row: span 3; display: grid; grid-template-rows: auto auto 1fr; grid-template-rows: subgrid; row-gap: 5px; padding: 8px 10px 9px; background: rgba(255, 255, 255, 0.045); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 6px; }
+  .dexcard > img { display: block; inline-size: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; background: radial-gradient(ellipse at 50% 40%, rgba(60, 120, 150, 0.32), rgba(8, 20, 34, 0.1) 72%); }
+  .dexcard hgroup h3 { margin: 0; font: 700 16px 'Malgun Gothic', sans-serif; letter-spacing: 0.5px; }
+  .dexcard hgroup p { margin: 1px 0 0; font-size: 10.5px; letter-spacing: 1.8px; text-transform: uppercase; color: var(--hl); }
+  .dexcard div p { margin: 0; font: 12px/1.5 'Malgun Gothic', sans-serif; opacity: 0.86; font-variant-numeric: tabular-nums; }
+  .dexcard div p:first-child { margin-bottom: 2px; }
+  .dexcard div .how { opacity: 0.6; font-size: 11.5px; }
+  .dexcard .chip { display: inline-block; padding: 0 6px; margin-right: 4px; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 3px; font-size: 10.5px; letter-spacing: 0.5px; }
+  .dexcard.new { border-color: var(--hl); box-shadow: 0 0 14px rgba(91, 192, 190, 0.25); }
+  .dexcard.none > img { filter: brightness(0) opacity(0.55); }
+  .dexcard.none hgroup h3 { opacity: 0.45; letter-spacing: 3px; }
+  #title { display: none; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at 50% 42%, rgba(2, 8, 18, 0.1) 0%, rgba(2, 8, 18, 0.62) 100%); text-align: center; }
+  #title h1 { margin: 0; font-size: clamp(38px, 6.2vw, 92px); font-weight: 700; letter-spacing: 0.16em; text-shadow: 0 4px 30px rgba(0, 0, 0, 0.55); }
+  #title h1 span { color: var(--hl); }
+  #title { justify-content: flex-start; padding-top: 9vh; }
+  #title .tagline { margin: 10px 0 26px; font: clamp(14px, 1.35vw, 20px) 'Malgun Gothic', sans-serif; letter-spacing: 0.22em; opacity: 0.94; text-shadow: 0 2px 10px rgba(0, 0, 0, 0.7); }
+  #start { cursor: pointer; padding: 13px 44px 12px; font: 700 19px 'Malgun Gothic', sans-serif; letter-spacing: 0.3em; color: #06141c; background: var(--hl); border: 0; border-radius: 5px; box-shadow: 0 6px 30px rgba(91, 192, 190, 0.35); transition: transform 0.15s, box-shadow 0.15s; }
+  #start:hover { transform: translateY(-2px); box-shadow: 0 10px 36px rgba(91, 192, 190, 0.55); }
+  #start:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  /* key help sits along the bottom so the boat (and the skipper) stay in view behind the title */
+  .keys { position: absolute; inset-inline: 0; bottom: 52px; margin-inline: auto; inline-size: min(1230px, 96vw); display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; text-align: left; font-family: 'Malgun Gothic', sans-serif; }
+  .keys > div { padding: 11px 16px 10px; font-size: 12.5px; line-height: 1.9; flex: 1 1 340px; }
+  .keys h3 { margin: 0 0 4px; font: 600 13px Bahnschrift, 'Segoe UI', sans-serif; letter-spacing: 2.4px; color: var(--hl); }
+  .foot { position: absolute; bottom: 12px; left: 0; right: 0; padding: 0 16px; font: 11px/1.6 'Malgun Gothic', sans-serif; opacity: 0.6; letter-spacing: 0.4px; }
+  #pause { display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(2, 8, 18, 0.55); backdrop-filter: blur(4px); cursor: pointer; text-align: center; z-index: 6; }
+  #pause h2 { font: 700 30px 'Malgun Gothic', sans-serif; letter-spacing: 0.3em; margin: 0 0 8px; }
+  #pause p { opacity: 0.85; font-family: 'Malgun Gothic', sans-serif; margin: 0; }
+  #loading { display: flex; flex-direction: column; align-items: center; justify-content: center; background: #02060c; z-index: 10; transition: opacity 0.7s; }
+  #loading h1 { font-size: 30px; letter-spacing: 0.3em; font-weight: 600; margin: 0 0 22px; }
+  #loading h1 span { color: var(--hl); }
+  #loading .bar { flex: none; width: 320px; height: 3px; }
+  #loading .bar i { width: 0%; transition: width 0.25s; }
+  #loadText { margin-top: 12px; font: 13px 'Malgun Gothic', sans-serif; opacity: 0.7; min-height: 18px; }
+  #err { display: none; position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 22px 28px; max-width: 560px; font: 15px/1.7 'Malgun Gothic', sans-serif; z-index: 20; }
+</style>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div id="mode" class="glass">Boat Fishing</div>
+  <div id="stat" class="glass">CATCH<b id="sCount">0</b> &nbsp; SCORE<b id="sScore">0</b> &nbsp; 도감<b id="sDex">0/0</b></div>
+  <div id="miniBox" class="glass"><canvas id="mini" width="360" height="360"></canvas><div id="miniLab"></div></div>
+  <div id="fishHud" class="glass gauge">
+    <div class="row"><span class="lab">TENSION</span><div class="bar"><span class="zone"></span><i id="tBar"></i></div></div>
+    <div class="row"><span class="lab">DISTANCE</span><span class="val" id="tDist">0.0 m</span></div>
+  </div>
+  <div id="driveHud" class="glass gauge">
+    <div class="row top"><span><span class="big" id="dSpd">0.0</span><span class="unit">KN</span></span><span class="val" id="dHead">N 000°</span></div>
+    <div class="row"><span class="lab">THROTTLE</span><div class="bar"><i id="dThr"></i></div></div>
+  </div>
+  <div id="diveHud" class="glass gauge">
+    <div class="row"><span class="lab">OXYGEN</span><div class="bar"><i id="oBar"></i></div><span class="lab" style="margin-left:8px">DEPTH</span><div class="bar" style="flex:0.6"><i id="dBar"></i></div><span class="val" id="dVal">0.0 m</span></div>
+  </div>
+  <div id="cross"></div>
+  <div id="lockLab"></div>
+  <div id="prompt" class="glass"></div>
+  <div id="hint"></div>
+  <div id="alert" class="glass">⚠ 상어 접근</div>
+  <div id="marker" class="glass mk"></div>
+  <div id="boatMk" class="glass mk"></div>
+  <div id="toasts"></div>
+  <div id="card" class="glass">
+    <div class="sp" id="cName"></div><div class="en" id="cEn"></div>
+    <div class="grid"><div><span>LENGTH</span><b id="cLen"></b></div><div><span>WEIGHT</span><b id="cKg"></b></div><div><span>SCORE</span><b id="cPts"></b></div></div>
+    <div class="badge" id="cBadge">NEW RECORD</div>
+    <div class="go">클릭하여 계속</div>
+  </div>
+</div>
+
+<dialog id="dex" aria-label="도감">
+  <header><h2>도감<small>FIELD GUIDE</small></h2><span id="dexSub"></span><kbd>Tab</kbd></header>
+  <div id="dexGrid"></div>
+</dialog>
+
+<div id="title">
+  <h1>PROJECT <span>DEEP BLUE</span></h1>
+  <div class="tagline">극사실주의 해양 선상 낚시 &amp; 해저 작살 시뮬레이션</div>
+  <button id="start">출항하기</button>
+  <div class="keys">
+    <div class="glass"><h3>BOAT FISHING</h3>
+      <kbd>좌클릭</kbd>누르고 있다 놓으면 캐스팅 · 누르는 동안 릴링<br>
+      <kbd>우클릭</kbd>줌 &nbsp;<kbd>F</kbd>다이빙 &nbsp;<kbd>E</kbd>운전 &nbsp;<kbd>T</kbd>시간대<br>
+      대물이 <b>질주</b>하면 릴을 놓고, <b>점프·버티기</b> 때는 감으세요</div>
+    <div class="glass"><h3>HELM</h3>
+      <kbd>W</kbd><kbd>S</kbd>스로틀 전진·후진 &nbsp;<kbd>A</kbd><kbd>D</kbd>조타<br>
+      <kbd>마우스</kbd>시점 &nbsp;<kbd>E</kbd>닻을 내리고 낚시 위치로<br>
+      파도를 타고 넘으면 선체가 뜨고 떨어집니다 — 미니맵의 섬·배를 찾아가 보세요</div>
+    <div class="glass"><h3>UNDERSEA SPEARFISHING</h3>
+      <kbd>W A S D</kbd>유영 &nbsp;<kbd>Space</kbd>상승 &nbsp;<kbd>C</kbd>하강 &nbsp;<kbd>Shift</kbd>질주<br>
+      <kbd>좌클릭</kbd>작살 &nbsp;<kbd>우클릭</kbd>조준 &nbsp;<kbd>E</kbd>채집 &nbsp;<kbd>L</kbd>라이트<br>
+      <kbd>F</kbd>보트로 복귀 (어디서든) &nbsp;<kbd>Tab</kbd>도감</div>
+  </div>
+  <div class="foot">Chrome · WebGL2 · F11 전체 화면 권장 &nbsp;|&nbsp; 에셋: Quixel Megascans (Fab) · Poly Haven (CC0) · CC-BY — Dom Baker, Tony Flanagan, Charlie catling, Romain Ferre, DylanHayes, UPWARD, GG Beta Pie, Forge of Fantasy, GoldenZtuff, Optic Idealist (목록: CREDITS.md) &nbsp;|&nbsp; <span id="qInfo"></span></div>
+</div>
+
+<div id="pause"><h2>일시정지</h2><p>화면을 클릭하면 계속합니다</p></div>
+<div id="loading"><h1>PROJECT <span>DEEP BLUE</span></h1><div class="bar"><i id="loadBar"></i></div><div id="loadText">초기화 중…</div></div>
+<div id="err" class="glass"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.160.1/three.min.js"></script>
+<script src="assets/manifest.js"></script>
+<script src="src/engine/core.js"></script>
+<script src="src/engine/assets.js"></script>
+<script src="src/world/env.js"></script>
+<script src="src/world/ocean.js"></script>
+<script src="src/engine/post.js"></script>
+<script src="src/world/world.js"></script>
+<script src="src/game/boat.js"></script>
+<script src="src/game/fish.js"></script>
+<script src="src/engine/fx.js"></script>
+<script src="src/game/fishing.js"></script>
+<script src="src/world/reef.js"></script>
+<script src="src/game/dive.js"></script>
+<script src="src/world/sea.js"></script>
+<script src="src/game/crew.js"></script>
+<script src="src/engine/audio.js"></script>
+<script src="src/game/dex.js"></script>
+<script src="src/game/ui.js"></script>
+<script src="src/game/main.js"></script>

@@ -1,0 +1,13 @@
+{
+  "name": "deepblue-tools",
+  "private": true,
+  "description": "Dev-time tools for Project Deep Blue: asset packing, Fab downloads, headless checks. The game itself needs none of this.",
+  "scripts": {
+    "build": "node build_assets.mjs",
+    "serve": "node dev/serve.mjs 8765",
+    "selftest": "node dev/shot.mjs size=1280x720 url=http://127.0.0.1:8765/index.html?selftest w=70000 \"e=JSON.stringify(DB.selftestResult)\""
+  },
+  "dependencies": {
+    "sharp": "^0.35.5"
+  }
+}

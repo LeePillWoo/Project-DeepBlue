@@ -1,0 +1,17 @@
+// node glbinfo.mjs file.glb [-v]  — summarise a GLB: meshes, tris, skins, animations, textures, bbox
+import fs from 'node:fs';
+const [file, verbose] = process.argv.slice(2);
+const b = fs.readFileSync(file), jl = b.readUInt32LE(12), gl = JSON.parse(b.slice(20, 20 + jl).toString());
+const acc = gl.accessors || [];
+let tris = 0, verts = 0; const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+for (const m of gl.meshes || []) for (const p of m.primitives) { tris += (p.indices !== undefined ? acc[p.indices].count : acc[p.attributes.POSITION].count) / 3; verts += acc[p.attributes.POSITION].count; }
+console.log(file.split(/[\/]/).pop(), (b.length / 1e6).toFixed(1) + 'MB', '| nodes', (gl.nodes || []).length, '| meshes', (gl.meshes || []).length, '| prims', (gl.meshes || []).reduce((a, m) => a + m.primitives.length, 0), '| tris', tris, '| verts', verts, '| mats', (gl.materials || []).length, '| tex', (gl.textures || []).length, '| images', (gl.images || []).length, '| skins', (gl.skins || []).length, (gl.skins || []).map((s) => s.joints.length + 'j').join(','), '| anims', (gl.animations || []).length);
+console.log('  ext:', (gl.extensionsUsed || []).join(','), '| root nodes:', gl.scenes[gl.scene || 0].nodes.map((n) => gl.nodes[n].name + JSON.stringify({ t: gl.nodes[n].translation, r: gl.nodes[n].rotation, s: gl.nodes[n].scale, m: gl.nodes[n].matrix && 'matrix' })).join(' ; ').slice(0, 400));
+for (const a of gl.animations || []) { const ins = a.samplers.map((s) => acc[s.input]); console.log('  anim', JSON.stringify(a.name), 'channels', a.channels.length, 'dur', Math.max(...ins.map((i) => i.max ? i.max[0] : 0)).toFixed(2), 'keys', Math.max(...ins.map((i) => i.count)), 'paths', [...new Set(a.channels.map((c) => c.target.path))].join('/')); }
+for (const [i, m] of (gl.materials || []).entries()) { const p = m.pbrMetallicRoughness || {}; console.log('  mat', i, JSON.stringify(m.name), 'base', p.baseColorTexture ? 'tex' + p.baseColorTexture.index : JSON.stringify(p.baseColorFactor), 'nor', m.normalTexture ? 'y' : '-', 'mr', p.metallicRoughnessTexture ? 'y' : `${p.metallicFactor ?? 1}/${p.roughnessFactor ?? 1}`, m.alphaMode || '', m.doubleSided ? 'DS' : '', m.emissiveTexture ? 'emis' : ''); }
+for (const [i, im] of (gl.images || []).entries()) { const bv = gl.bufferViews[im.bufferView]; console.log('  img', i, im.name || '', im.mimeType, bv ? (bv.byteLength / 1e6).toFixed(2) + 'MB' : im.uri); }
+if (verbose) {
+  for (const [i, m] of (gl.meshes || []).entries()) console.log('  mesh', i, JSON.stringify(m.name), m.primitives.map((p) => `mat${p.material} v${acc[p.attributes.POSITION].count} t${p.indices !== undefined ? acc[p.indices].count / 3 : '?'} ${Object.keys(p.attributes).join(',')} min${JSON.stringify(acc[p.attributes.POSITION].min.map((v) => +v.toFixed(2)))} max${JSON.stringify(acc[p.attributes.POSITION].max.map((v) => +v.toFixed(2)))}${p.targets ? ' morph' + p.targets.length : ''}`).join(' | '));
+  const show = (ni, d) => { const n = gl.nodes[ni]; if (d < (+verbose || 3)) console.log('  ' + '  '.repeat(d) + (n.name || '?') + (n.mesh !== undefined ? ' [mesh ' + n.mesh + ']' : '') + (n.skin !== undefined ? ' [skin ' + n.skin + ']' : '') + (n.scale ? ' s=' + n.scale.map((v) => +v.toFixed(3)) : '') + (n.translation ? ' t=' + n.translation.map((v) => +v.toFixed(2)) : '') + (n.rotation ? ' r=' + n.rotation.map((v) => +v.toFixed(2)) : '')); for (const c of n.children || []) show(c, d + 1); };
+  for (const r of gl.scenes[gl.scene || 0].nodes) show(r, 0);
+}

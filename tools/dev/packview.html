@@ -1,0 +1,44 @@
+<!doctype html><meta charset="utf-8"><title>packview</title>
+<style>html,body{margin:0;background:#888;overflow:hidden}canvas{display:block}#i{position:fixed;left:6px;top:4px;font:12px monospace;color:#fff;text-shadow:0 0 3px #000;white-space:pre}</style>
+<canvas id="c"></canvas><div id="i"></div>
+<script src="/lib/three.min.js"></script>
+<script>window.DB = {};</script>
+<script src="/src/engine/assets.js"></script>
+<script>
+// Renders packed assets through the game's own loader.
+//   ?pack=fab&m=fab_turtle[&vc=1]      static model     ?pack=chars&c=crew&a=idle&t=2     skinned character
+//   &views=q,side,front,top,face,back   &s=<uniform scale>
+const P = new URLSearchParams(location.search), T = THREE;
+const r = new T.WebGLRenderer({ canvas: document.getElementById('c'), antialias: true }); r.setSize(innerWidth, innerHeight); r.outputColorSpace = T.SRGBColorSpace; r.toneMapping = T.ACESFilmicToneMapping;
+const scene = new T.Scene(); scene.background = new T.Color(P.get('bg') || '#8a97a6');
+scene.add(new T.HemisphereLight(0xdfeaff, 0x8a7a66, 1.6)); const sun = new T.DirectionalLight(0xfff2e0, 3.2); sun.position.set(2, 4, 3); scene.add(sun);
+const cam = new T.PerspectiveCamera(30, 1, 0.01, 5000);
+window.V = { ready: false };
+const s = document.createElement('script'); s.src = '/assets/' + P.get('pack') + '.js';
+s.onload = async () => {
+  let root, ch = null;
+  if (P.get('c')) { ch = DB.Assets.character(P.get('c')); root = ch.group; const a = ch.actions[P.get('a') || 'idle']; if (a && P.get('a') !== 'none') { a.play(); ch.mixer.setTime(+(P.get('t') || 0)); } V.ch = ch; }
+  else {
+    const name = P.get('m');
+    if (P.get('vc')) { root = new T.Group(); DB.Assets.parts(name).forEach((p, i) => root.add(new T.Mesh(DB.Assets.geo(name, i), new T.MeshStandardMaterial({ vertexColors: true, roughness: 0.6 })))); }
+    else root = DB.Assets.object(name);
+  }
+  scene.add(root); await DB.Assets.ready(); root.updateMatrixWorld(true);
+  const box = new T.Box3(), tmp = new T.Box3(); let tris = 0, n = 0;
+  root.traverse((o) => { if (o.isMesh) { n++; tris += o.geometry.index.count / 3; if (o.isSkinnedMesh) { o.computeBoundingBox(); tmp.copy(o.boundingBox).applyMatrix4(o.matrixWorld); } else tmp.setFromObject(o); box.union(tmp); } });
+  const size = box.getSize(new T.Vector3()), ctr = box.getCenter(new T.Vector3());
+  V.info = { meshes: n, tris, size: size.toArray().map((x) => +x.toFixed(3)), min: box.min.toArray().map((x) => +x.toFixed(3)), max: box.max.toArray().map((x) => +x.toFixed(3)) };
+  document.getElementById('i').textContent = location.search + '\n' + JSON.stringify(V.info);
+  const views = (P.get('views') || 'front,q,face').split(','), W = innerWidth / views.length, H = innerHeight, R = Math.max(size.x, size.y, size.z);
+  r.setScissorTest(true);
+  V.draw = () => views.forEach((name, i) => {
+    let d = R * 2.3, tgt = ctr.clone(), dir = new T.Vector3(0, 0.1, 1);
+    if (name === 'q') dir.set(0.75, 0.25, 0.8); else if (name === 'side') dir.set(1, 0.1, 0); else if (name === 'back') dir.set(-0.5, 0.2, -1); else if (name === 'top') dir.set(0.01, 1, 0.01); else if (name === 'under') dir.set(0.3, -1, 0.3);
+    else if (name === 'face') { tgt.set(ctr.x, box.max.y - size.y * 0.09, ctr.z + size.z * 0.1); d = size.y * 0.42; dir.set(0.25, 0.05, 1); }
+    cam.aspect = W / H; cam.updateProjectionMatrix(); cam.position.copy(tgt).addScaledVector(dir.normalize(), d / (2 * Math.tan((cam.fov * Math.PI) / 360)) * 0.62); cam.lookAt(tgt);
+    r.setViewport(i * W, 0, W, H); r.setScissor(i * W, 0, W, H); r.render(scene, cam);
+  });
+  V.draw(); setTimeout(() => { V.draw(); V.ready = true; }, 500);
+};
+document.head.appendChild(s);
+</script>
