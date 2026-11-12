@@ -6,8 +6,8 @@
   const set = (el, prop, v) => { if (el['_' + prop] !== v) { el['_' + prop] = v; if (prop === 'text') el.textContent = v; else if (prop === 'html') el.innerHTML = v; else el.style[prop] = v; } };
   const HINTS = {
     tease: ['톡… 톡…', '아직입니다 — 확 끌고 갈 때 챔질', '#cfe3ff'],
-    bite: ['입질!', '지금 좌클릭으로 챔질', '#ffe9a8'], run: ['질주!', '릴을 놓으세요 — 드랙이 버팁니다', '#ffb37a'], fight: ['버티는 중', '감으세요 · 텐션이 빨개지면 잠깐 놓기', '#e8f6ff'],
-    jump: ['점프!', '감아서 텐션을 유지하세요 · 우클릭 줌', '#a8f0ff'], tired: ['지쳤습니다', '계속 감아 올리세요', '#c9ffd9'], high: ['텐션 과다!', '릴을 놓으세요 — 줄이 끊어집니다', '#ff8a7a'], low: ['줄이 느슨합니다', '감으세요 — 바늘이 빠집니다', '#ffd27a'],
+    bite: ['입질!', '지금 좌클릭으로 챔질', '#ffe9a8'], run: ['질주!', '릴을 놓고 낚싯대는 세운 채로 버티세요', '#ffb37a'], fight: ['버티는 중', '마우스를 당겨 낚싯대를 세우고 → 밀어 내리면서 감기', '#e8f6ff'],
+    jump: ['점프!', '감아서 텐션을 유지하세요 · 우클릭 줌', '#a8f0ff'], tired: ['지쳤습니다', '당겨 올리고 내리며 감아 끌어오세요', '#c9ffd9'], high: ['텐션 과다!', '릴을 놓으세요 — 줄이 끊어집니다', '#ff8a7a'], low: ['줄이 느슨합니다', '감으세요 — 바늘이 빠집니다', '#ffd27a'],
   };
   const MODE = { boat: 'Boat Fishing', drive: 'At the Helm', dive: 'Undersea Spearfishing' };
   const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -69,6 +69,12 @@
         set($('tBar'), 'background', T > 0.86 ? 'var(--bad)' : T > 0.74 ? 'var(--warn)' : T < 0.17 && st === 'fight' ? '#ffd27a' : 'var(--hl)');
         set($('tDist'), 'text', F.dist.toFixed(1) + ' m');
       }
+      // the rod: where it is, whether it is cushioning (inside the marked band), and side pressure
+      set($('rodRow'), 'display', st === 'fight' ? 'flex' : 'none');
+      if (st === 'fight') {
+        set($('rBar'), 'width', Math.round(F.rodA * 100) + '%'); set($('rBar'), 'background', F.cush > 0.8 ? 'var(--hl)' : 'var(--warn)');
+        set($('rSide'), 'text', F.side > 0.5 ? '측면 압박' : F.cush < 0.5 ? (F.rodA < 0.3 ? '너무 눕힘' : '너무 세움') : '');
+      }
       // guidance: mode changes flash briefly, mistakes stay up
       this.hintT += dt;
       let key = '';
@@ -79,7 +85,10 @@
       let p = extraPrompt || '';
       if (!p && !this.cardOn) {
         if (st === 'idle') p = `<kbd>좌클릭</kbd>길게 눌러 캐스팅 &nbsp; <kbd>E</kbd>운전 &nbsp; ${canDive ? '<kbd>F</kbd>다이빙' : '<span style="opacity:.6">다이빙은 REEF 부표 근처에서</span>'}`;
-        else if (st === 'charge') p = `캐스팅 파워 ${'▮'.repeat(Math.round(F.power * 10))}${'▯'.repeat(10 - Math.round(F.power * 10))}`;
+        else if (st === 'charge') {      // 12 cells over 0 … 1.2: white while loading, green where a release is perfect, red once overloaded
+          let g = ''; for (let i = 0; i < 12; i++) { const on = F.power > i * 0.1, col = i >= 10 ? '#ff8a7a' : i === 9 ? '#a8ff5a' : '#fff'; g += `<span style="color:${col};opacity:${on ? 1 : 0.28}">▮</span>`; }
+          p = `캐스팅 ${g} &nbsp;<span style="opacity:.75">초록에서 놓기 · 빨강은 백래시</span>`;
+        } else if (st === 'tangle') p = '백래시 — 엉킨 줄을 푸는 중…';
         else if (st === 'wait') p = '입질을 기다리는 중 — <kbd>좌클릭</kbd>을 짧게 끊어 치면 루어가 춤춥니다';
       }
       this.prompt(p);

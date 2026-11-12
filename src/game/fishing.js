@@ -94,6 +94,10 @@
   const Fishing = (DB.Fishing = {
     state: 'idle', tension: 0, dist: 0, power: 0, active: true, hint: '', zone: 'ok', fish: null, escaped: null, count: 0,
     load: 0, yaw: 0, pitch: 0, crank: 0, over: 0, slack: 0, t: 0, nibble: 0, tease: null, holdT: 0, biteT: 0, popT: 0,
+    // the cast: power swings up to 1, into overload if held, then sags and comes round again. castKind: ok | perfect | backlash
+    rise: true, flick: 0, castKind: 'ok', tangleT: 0,
+    // the fight: rodA = how far the rod is raised (0 pointed at the fish … 1 hauled right back), rodT where the mouse wants it, rodV its speed, cush how well it is cushioning
+    rodA: 0.6, rodT: 0.6, rodV: 0, cush: 1, side: 0,
 
     init(scene, camera) {
       this.scene = scene; this.camera = camera;
@@ -218,6 +222,7 @@
         pf: M.clamp(0.48 + 0.52 * sp.power * (0.55 + 0.45 * size), 0.38, 1.05), deepRun: sp.jump < 0.5,
       });
       this.state = 'fight'; this.tension = 0.5; this.over = 0; this.slack = 0; this.lure.visible = false;
+      this.rodA = this.rodT = 0.6; this.rodV = 0;
       DB.FX.splash(this.lurePos.x, DB.Ocean.height(this.lurePos.x, this.lurePos.z), this.lurePos.z, 0.5 + size * 0.4);
       DB.Ocean.addRipple(this.lurePos.x, this.lurePos.z, 1.2);
       DB.emit('hook', this.fish);
@@ -246,19 +251,31 @@
       switch (this.state) {
         case 'idle': {
           this.hangLure(dt);
-          if (this.active && inp.mouseDown(0)) { this.state = 'charge'; this.power = 0; }
+          if (this.active && inp.mouseDown(0)) { this.state = 'charge'; this.power = 0; this.rise = true; this.flick = 0; }
           this.end.copy(this.lurePos); slackT = 0;
           break;
         }
         case 'charge': {
-          this.power = Math.min(this.power + dt / 1.15, 1);
-          pitchT = 0.95 * this.power + 0.1; yawT = -0.25 * this.power;
+          // the rod loads as it comes back: full at 1, overloaded if it is held on (a backlash waiting to happen), then it sags and has to be swung up again
+          if (this.rise) { this.power += dt / 1.05; if (this.power >= 1.2) this.rise = false; } else { this.power -= dt * 1.1; if (this.power <= 0.4) this.rise = true; }
+          this.flick = M.damp(this.flick, -(inp.mdy || 0) / Math.max(dt, 1e-3), 14, dt);      // how hard the rod is being thrown forward (px/s)
+          pitchT = 0.95 * this.power + 0.1; yawT = -0.25 * this.power; loadT = 0.1 + 0.3 * this.power;
           this.hangLure(dt); this.end.copy(this.lurePos); slackT = 0;
           if (!inp.mouse(0)) {      // release → launch
-            const p = 0.3 + 0.7 * this.power, v = 12.5 + 14.5 * p, el = 0.5;
-            this.lureVel.set((fwx / fl) * Math.cos(el) * v, Math.sin(el) * v, (fwz / fl) * Math.cos(el) * v);
-            this.state = 'cast'; this.castT = 0; DB.emit('cast', p);
+            const pw = this.power, kind = pw > 1.02 ? 'backlash' : pw >= 0.92 ? 'perfect' : 'ok', p = 0.3 + 0.7 * Math.min(pw, 1), el = 0.5;
+            // let go at full load and it flies 10% further, dead straight; a forward flick adds a little; overloaded, the spool overruns and the lure drops short
+            const v = (12.5 + 14.5 * p) * (kind === 'perfect' ? 1.1 : kind === 'backlash' ? 0.42 : 1) * (1 + 0.08 * M.sat(this.flick / 900));
+            const dev = kind === 'perfect' ? 0 : (Math.random() - 0.5) * (kind === 'backlash' ? 0.6 : 0.2 * (1 - Math.min(pw, 1))), ca = Math.cos(dev), sa = Math.sin(dev);
+            const dx = (fwx * ca - fwz * sa) / fl, dz = (fwx * sa + fwz * ca) / fl;
+            this.lureVel.set(dx * Math.cos(el) * v, Math.sin(el) * v, dz * Math.cos(el) * v);
+            this.state = 'cast'; this.castT = 0; this.castKind = kind; DB.emit('cast', kind);
           }
+          break;
+        }
+        case 'tangle': {     // a bird's nest on the spool: nothing to do but pick it out
+          this.tangleT -= dt; pitchT = -0.35; yawT = 0.1; slackT = 0.6; cranking = 0.25;
+          this.lurePos.y = O.height(this.lurePos.x, this.lurePos.z) - 0.02; this.end.copy(this.lurePos);
+          if (this.tangleT <= 0) { this.state = 'idle'; this.lurePos.copy(this.tip).y -= 0.5; this.lurePrev.copy(this.lurePos); this.lureVel.set(0, 0, 0); }
           break;
         }
         case 'cast': {
@@ -268,7 +285,8 @@
           const wy = O.height(this.lurePos.x, this.lurePos.z);
           this.end.copy(this.lurePos); slackT = 0.25;
           if (this.lurePos.y <= wy) {
-            this.lurePos.y = wy; this.state = 'wait';
+            this.lurePos.y = wy; this.state = this.castKind === 'backlash' ? 'tangle' : 'wait'; this.tangleT = 2.6;
+            this.dist = Math.hypot(this.lurePos.x - this.tip.x, this.lurePos.z - this.tip.z);
             DB.FX.splash(this.lurePos.x, wy, this.lurePos.z, 0.16); O.addRipple(this.lurePos.x, this.lurePos.z, 0.5); DB.emit('plop');
             this.biteT = this.count === 0 ? 2.6 + Math.random() * 1.5 : 3 + Math.random() * 7; this.arched = false; this.nibble = 0; this.popT = 0; this.tease = null; this.holdT = 0;
           }
@@ -325,6 +343,9 @@
           break;
         }
         case 'fight': {
+          // the mouse works the rod: pull it back (toward you) to raise the rod, push it forward to lower it
+          this.rodT = M.clamp(this.rodT + (inp.mdy || 0) * 0.0032, 0, 1);
+          const a0 = this.rodA; this.rodA += M.clamp(this.rodT - this.rodA, -2.4 * dt, 2.4 * dt); this.rodV = (this.rodA - a0) / Math.max(dt, 1e-3);
           const r = this.fightStep(dt, reelHeld);
           yawT = r.yaw; pitchT = r.pitch; loadT = r.load; slackT = r.slack; cranking = r.crank;
           break;
@@ -387,6 +408,12 @@
       const f = this.fish, sp = f.sp, O = DB.Ocean, out = this._fo || (this._fo = {});
       let T_ = this.tension, pull = 0.2, shake = 0;
       const reelRate = 3.6 * (1 - 0.75 * T_ * T_);
+      // Rod work. Pumping: raising the rod drags the fish toward the boat (PUMP metres for a full sweep, if it lets itself be dragged);
+      // lowering it gives that line back unless it is reeled in on the way down — and cranking only really gains line while the rod is coming down.
+      // Cushion: a raised rod bends and takes the shocks; pointed at the fish, or hauled right back, it cannot.
+      const PUMP = 3.4, up = Math.max(this.rodV, 0), down = Math.max(-this.rodV, 0), rodA = this.rodA;
+      const cush = (this.cush = M.smooth(0.12, 0.45, rodA) * (1 - 0.5 * M.smooth(0.9, 1, rodA)));
+      const crank = reel ? reelRate * (0.45 + Math.min(down * 1.6, 1.15)) : 0;
       f.modeT -= dt;
       if (f.jump) {
         const j = f.jump; j.t += dt;
@@ -413,12 +440,15 @@
         if (f.mode === 'tired' && !f.surge && f.D < 13) { f.surge = true; f.mode = 'run'; f.modeT = 1.5; f.turn = (Math.random() < 0.5 ? -1 : 1) * 0.6; DB.emit('surge'); }
         if (f.mode === 'run' && sp.jump > 0.4 && !f.jumped && f.modeT < 2.6) this.startJump(f);
         let depthT = 1.0;
+        // side pressure: the rod laid over against the way the fish is swinging turns its head and wears it down
+        const lead = (this.fishOff || 0) * Math.sign(f.turn || 0), side = (this.side = f.mode === 'tired' ? 0 : M.smooth(0.12, 0.3, lead) * (1 - M.smooth(0.55, 0.8, lead)));
+        if (side > 0) f.turn *= 1 - Math.min(1.1 * side * dt, 1);
         if (f.mode === 'run') {
-          f.D += (2.3 + 3.5 * sp.power) * vigor * (reel ? 0.55 : 1) * dt; pull = 0.76 * f.pf + 0.06; depthT = f.deepRun ? 10 : 0.55;
+          f.D += (2.3 + 3.5 * sp.power) * vigor * (reel ? 0.55 : 1) * (1 - 0.25 * side) * dt; pull = 0.76 * f.pf + 0.06; depthT = f.deepRun ? 10 : 0.55;
         } else if (f.mode === 'fight') {
-          f.D += (0.7 * vigor - (reel ? reelRate : 0)) * dt; pull = 0.45 * f.pf; shake = 0.13 * f.pf * Math.sin(this.t * 17) * Math.sin(this.t * 3.1); depthT = f.deepRun ? 5 : 1.6;
+          f.D += (0.7 * vigor - crank - up * PUMP * 0.62 + (reel ? 0 : down * PUMP * 0.55)) * dt; pull = 0.45 * f.pf; shake = 0.13 * f.pf * Math.sin(this.t * 17) * Math.sin(this.t * 3.1); depthT = f.deepRun ? 5 : 1.6;
         } else {
-          f.D += (0.25 - (reel ? reelRate * 1.25 : 0)) * dt; pull = 0.2 * f.pf + 0.03; depthT = 0.9;
+          f.D += (0.25 - (reel ? reelRate * 1.25 * (0.8 + Math.min(down * 1.2, 0.6)) : 0) - up * PUMP + (reel ? 0 : down * PUMP * 0.6)) * dt; pull = 0.2 * f.pf + 0.03; depthT = 0.9;
         }
         if (!f.jump) {
           f.bearing += f.turn * dt * (f.mode === 'tired' ? 0.3 : 1) * Math.min(1, 14 / Math.max(f.D, 6));
@@ -434,14 +464,16 @@
           if (f.depth < 1.3 && f.mode !== 'tired' && f.wake <= 0) { f.wake = 0.13; DB.FX.splash(f.pos.x, f.pos.y + f.depth, f.pos.z, 0.1 + f.size * 0.14 * (f.mode === 'run' ? 1.6 : 1)); if (Math.random() < 0.4) O.addRipple(f.pos.x, f.pos.z, 0.5); }
         }
         // stamina
-        if (f.mode !== 'tired') f.S = Math.max(f.S - dt * (0.01 + 0.06 * T_) / (sp.stamina * (0.75 + 0.6 * f.size)) * (f.mode === 'run' ? 1.25 : 1), 0);
+        if (f.mode !== 'tired') f.S = Math.max(f.S - dt * (0.01 + 0.06 * T_) / (sp.stamina * (0.75 + 0.6 * f.size)) * (f.mode === 'run' ? 1.25 : 1) * (1 + 0.6 * side), 0);
         else if (T_ < 0.2) f.S = Math.min(f.S + dt * 0.012, 0.3);
       }
       f.prev.copy(f.pos);
       this.placeFish(f, f.mode === 'tired' ? 0.6 : 1);
       // line tension
       f.age += dt;
-      let target = M.clamp(pull * (reel ? 1.3 : 0.55) + (reel ? 0.22 : 0) + shake, 0, 1.25);
+      // reeling against a run loads the line hardest; hauling the rod up adds load with its speed (worst against a run); dropping it without reeling makes slack
+      let target = (pull * (reel ? (f.mode === 'run' ? 1.45 : 1.3) : 0.55) + (reel ? 0.22 : 0) + shake * (1 - 0.6 * cush)) * (1.22 - 0.34 * cush);
+      target = M.clamp(target + up * (f.mode === 'run' ? 0.5 : 0.22) * f.pf - (reel ? 0 : down * 0.55), 0, 1.25);
       if (f.age < 2.5) target = Math.min(target, 0.84);          // the hook-set itself never snaps the line
       this.tension = T_ = M.clamp(T_ + (target - T_) * Math.min((target > T_ ? 4.2 : 2.6) * dt, 1), 0, 1.15);
       this.over = T_ > 0.92 ? this.over + dt : Math.max(this.over - dt * 1.5, 0);
@@ -455,7 +487,7 @@
       const fw = _d.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
       this.fishOff = M.wrapPi(Math.atan2(f.pos.x - this.tip.x, f.pos.z - this.tip.z) - Math.atan2(fw.x, fw.z));     // how far off-axis the fish is (the view eases toward it)
       out.yaw = M.clamp(this.fishOff, -0.4, 0.4);
-      out.pitch = (reel ? -0.1 : 0.2) + shake * 0.5 + (f.jump ? 0.12 : 0); out.load = 0.12 + 0.88 * Math.min(T_, 1); out.slack = Math.max(0.5 - T_ * 2.2, 0); out.crank = reel ? 1 - 0.6 * T_ : 0;
+      out.pitch = M.lerp(-0.3, 0.78, rodA) + shake * 0.5 + (f.jump ? 0.06 : 0); out.load = 0.12 + 0.88 * Math.min(T_, 1); out.slack = Math.max(0.5 - T_ * 2.2, 0); out.crank = reel ? (1 - 0.6 * T_) * (0.5 + Math.min(down * 1.5, 1)) : 0;
       if (this.over > 2.0 || f.D > 310) this.endFight('snap');
       else if (this.slack > 4.0) this.endFight('lost');
       else if (f.D < 5.6 && !f.jump && f.mode !== 'run') { this.state = 'landing'; this.landT = 0; DB.emit('landing', f); }

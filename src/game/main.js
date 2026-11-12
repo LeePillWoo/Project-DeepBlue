@@ -147,7 +147,11 @@
   function wire() {
     const A = DB.Audio, on = DB.on, SP = DB.Species, name = (k) => SP[k].name;
     const eun = (w) => w + ((w.charCodeAt(w.length - 1) - 0xac00) % 28 ? '은' : '는');      // topic particle after a Korean word
-    on('cast', () => A.play('cast'));
+    on('cast', (kind) => {
+      A.play('cast');
+      if (kind === 'perfect') UI.toast('완벽한 타이밍 — 비거리 +10%', 'good', 2);
+      else if (kind === 'backlash') { A.play('snap'); UI.toast('백래시! 낚싯대를 너무 오래 당겼습니다 — 줄이 엉켰습니다', 'warn', 3.5); }
+    });
     on('plop', () => A.play('plop', { delay: DB.Fishing.dist / 340 }));
     on('nibble', () => A.play('nibble'));
     on('bite', () => A.play('bite'));
@@ -245,7 +249,9 @@
       if (G.drive) { G.dCam.yaw -= Input.mdx * sens; G.dCam.pitch = M.clamp(G.dCam.pitch + Input.mdy * sens, -0.04, 1.2); if (Input.mdx || Input.mdy) G.dCam.idle = 0; }
       else {
         look.dYaw = ((-Input.mdx * sens) / Math.max(dt, 0.004)) * 0.05; look.dPitch = ((-Input.mdy * sens) / Math.max(dt, 0.004)) * 0.05;
-        look.yaw -= Input.mdx * sens; look.pitch = M.clamp(look.pitch - Input.mdy * sens, -1.45, 1.45);
+        look.yaw -= Input.mdx * sens;
+        // while a fish is on, moving the mouse up and down works the rod instead of the view (which settles on the horizon)
+        if (G.state === 'boat' && F.state === 'fight') look.pitch = M.damp(look.pitch, -0.12, 2.5, dt); else look.pitch = M.clamp(look.pitch - Input.mdy * sens, -1.45, 1.45);
       }
     }
     // helm
@@ -405,7 +411,7 @@
     state() { const F = DB.Fishing, D = DB.Dive, B = DB.Boat; return { state: G.state, drive: G.drive, boat: B.mode, kn: +(B.u * 1.944).toFixed(1), x: +B.group.position.x.toFixed(1), z: +B.group.position.z.toFixed(1), fish: F.state, T: +F.tension.toFixed(2), dist: +F.dist.toFixed(1), mode: F.fish && F.fish.mode, S: F.fish && +F.fish.S.toFixed(2), o2: +D.o2.toFixed(2), depth: +D.depth.toFixed(1), bag: D.bag.length, lock: D.lock && D.lock.name, pick: D.pick && D.pick.name, ms: +G.ms.toFixed(1), scale: DB.Q.scale }; },
   };
 
-  // ?selftest — the fight under three reel policies, the spear's range, the boat under power, a speared fish, every sound
+  // ?selftest — the cast, the bite, the fight and the rod work, the spear, the boat under power, the animals, a storm, every sound
   async function selftest() {
     DB.Weather.auto = false;      // fair weather for the checks: the storm has its own, below
     const F = DB.Fishing, B = DB.Boat, D = DB.Dive, res = [], check = (name, ok, info) => { res.push({ name, ok, info }); console.log(`[selftest] ${ok ? 'PASS' : 'FAIL'} ${name} — ${info}`); };
@@ -419,9 +425,44 @@
       return { out: out || 'timeout', t: Math.round(t) };
     };
     const settle = () => { for (let i = 0; i < 900 && F.state !== 'idle'; i++) { DB.debug.mouse(i % 4 === 0, 0); tick(1 / 60); } };      // click through the trophy
-    const a = fight((f) => !!f.fish && f.fish.mode !== 'run' && f.tension < 0.84, 400);
-    check('smart reeling lands the marlin', a.out === 'landing', `${a.out} after ${a.t}s`);
+    // the scripted angler works the rod through F.rodT (headless, there is no mouse to move): haul it up, reel it back down, and stand firm through a run
+    const pump = (f) => {
+      const fsh = f.fish; if (!fsh) return false;
+      if (fsh.mode === 'run' || fsh.jump) { f.rodT = 0.65; return false; }
+      if (f.t % 1.5 < 0.6) { f.rodT = 0.92; return false; }
+      f.rodT = 0.3; return f.tension < 0.84;
+    };
+    const crankOnly = (f) => !!f.fish && f.fish.mode !== 'run' && f.tension < 0.84;
+    const a = fight(pump, 400);
+    check('pumping lands the marlin', a.out === 'landing', `${a.out} after ${a.t}s`);
     settle();
+    // rod work, measured on a fish held in one mood: line gained in 12 s by pumping against cranking with the rod still …
+    const drill = (policy, mode, secs, each) => {
+      if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard(); DB.debug.hook('marlin');
+      const f = F.fish; f.D = 60; let peak = 0;
+      for (let i = 0; i < secs * 60 && F.fish === f && F.state === 'fight'; i++) { f.mode = mode; f.modeT = 9; f.S = 0.9; f.jumped = true; if (each) each(i / 60); DB.debug.mouse(policy(F), 0); tick(1 / 60); if (i > 150) peak = Math.max(peak, F.tension); }
+      DB.debug.mouse(false, 0); return { gain: 60 - f.D, peak, f };
+    };
+    const gCrank = drill(crankOnly, 'fight', 12).gain, gPump = drill(pump, 'fight', 12).gain;
+    check('pumping gains line much faster than cranking alone', gPump > 8 && gPump > gCrank * 1.6, `pumping ${gPump.toFixed(1)} m, cranking ${gCrank.toFixed(1)} m in 12 s`);
+    // … and what one running fish puts on the line with the rod pointed at it, then with the rod raised
+    let pkLow = 0, pkUp = 0;
+    drill(() => false, 'run', 12, (t) => { F.rodT = t < 6 ? 0.04 : 0.65; if (t > 3 && t < 6) pkLow = Math.max(pkLow, F.tension); if (t > 9) pkUp = Math.max(pkUp, F.tension); });
+    check('a raised rod cushions the run', pkLow > pkUp + 0.08, `tension ${pkLow.toFixed(2)} with the rod flat, ${pkUp.toFixed(2)} raised`);
+    if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard();
+    // --- the cast: let go at full load for the longest throw, hold on too long for a backlash
+    let castKind = ''; DB.on('cast', (k) => { castKind = k; });
+    const cast = (release) => {
+      F.state = 'idle'; DB.debug.mouse(true, 0);
+      for (let i = 0; i < 300 && !(F.state === 'charge' && F.power >= release); i++) tick(1 / 60);
+      DB.debug.mouse(false, 0);
+      for (let i = 0; i < 600 && F.state !== 'wait' && F.state !== 'tangle'; i++) tick(1 / 60);
+      const r = { kind: castKind, dist: F.dist, state: F.state };
+      F.state = 'idle'; F.lurePos.copy(F.tip).y -= 0.5; F.lurePrev.copy(F.lurePos); return r;
+    };
+    const cHalf = cast(0.5), cFull = cast(0.96), cOver = cast(1.1);
+    check('cast: full load flies furthest, overload is a backlash', cHalf.kind === 'ok' && cFull.kind === 'perfect' && cFull.dist > cHalf.dist * 1.25 && cOver.kind === 'backlash' && cOver.state === 'tangle' && cOver.dist < cHalf.dist,
+      `half ${cHalf.dist.toFixed(0)} m (${cHalf.kind}), full ${cFull.dist.toFixed(0)} m (${cFull.kind}), overloaded ${cOver.dist.toFixed(0)} m (${cOver.kind})`);
     // the rule itself, not a fish's mood: one long forced run with the reel held must part the line.
     // (Holding the reel through a whole real fight snaps most marlin, but roughly one in six never strings enough long runs together — measured, so not asserted.)
     const b = fight(() => true, 30, (f) => { f.mode = 'run'; f.modeT = 10; });
