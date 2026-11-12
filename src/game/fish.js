@@ -34,6 +34,8 @@
   const fanPec = { u: .27, y: -.045, sw: .75, dr: .25, vert: true, pts: [[0, .04], [.07, .065], [.13, .05], [.16, 0], [.13, -.05], [.07, -.065], [0, -.04]] };
 
   // L: length range (m); wK: kg = wK * L^3; power/stamina/jump: fight traits; score: points per kg
+  // Builder options: body = share of the length before the tail fin; wrap = paint runs around the girth (wide, flat bodies);
+  // fluke = horizontal tail; swimV = the tail beats up and down; hammer = a hammerhead's head; eye.z = eye placed out there
   const SP = (DB.Species = {
     marlin: {
       name: '청새치', en: 'Blue Marlin', L: [2.5, 3.8], wK: 9.5, body: .83, power: 1.0, stamina: 1.0, jump: 1.0, score: 3, rod: 'deep',
@@ -190,6 +192,62 @@
     turtle: { name: '푸른바다거북', en: 'Green Sea Turtle', L: [0.9, 1.35], wK: 62, score: 2, watch: true },
   });
   SP.shark.watch = true; SP.shark.score = 1;
+  // the giants and the other things modelled here rather than downloaded: only met, never caught
+  Object.assign(SP, {
+    whaleShark: {
+      name: '고래상어', en: 'Whale Shark', L: [9.5, 12], wK: 9.5, body: .8, pts: 1200, watch: true, wrap: true,
+      prof: [[0, .004, .006, .025], [.012, .018, .022, .06], [.04, .032, .034, .076], [.12, .05, .046, .08], [.25, .066, .058, .078], [.42, .07, .062, .068], [.6, .058, .052, .05], [.78, .036, .034, .03], [.92, .02, .018, .016], [1, .014, .012, .011]],
+      fins: [
+        { p: [[.5, .06], [.575, .14], [.6, .135], [.63, .07], [.66, .05]] }, { p: [[.78, .034], [.81, .068], [.835, .034]] },
+        { p: [[.8, -.03], [.83, -.06], [.85, -.028]] }, { p: [[.62, -.048], [.66, -.085], [.69, -.044]] },
+      ],
+      tail: [[-.3, .014], [-.36, .07], [-.5, .24], [-.465, .12], [-.41, .03], [-.4, -.02], [-.455, -.13], [-.43, -.135], [-.35, -.05], [-.3, -.012]],
+      pec: { u: .21, y: -.03, sw: .9, dr: .35, pts: [[0, .05], [.1, .056], [.2, .02], [.215, 0], [.13, -.02], [0, -.04]] },
+      eye: { u: .05, y: .004, r: .0055 },
+      style: { back: '#2c3c50', flank: '#3a4f66', belly: '#e6eaec', s: [.44, .57, .66], fin: '#2a394b', iris: '#0e1216' },
+      extra(c, h) {
+        for (let i = 0; i < 27; i++) {      // pale bars down the back and flank …
+          const u = .08 + i * .032, [t, b] = h.prof(u);
+          c.strokeStyle = 'rgba(215,228,236,0.22)'; c.lineWidth = 2; c.beginPath(); c.moveTo(h.X(u), h.Y(t)); c.lineTo(h.X(u + .003), h.Y(-b + (t + b) * .44)); c.stroke();
+        }
+        c.fillStyle = 'rgba(236,243,247,0.88)';      // … and rows of white spots between them
+        for (let i = 0; i < 46; i++) {
+          const u = .02 + i * .0205, [t, b] = h.prof(u);
+          for (let k = 0; k < 7; k++) { const r = 2 + ((i * 7 + k * 5) % 5) * .5; c.beginPath(); c.ellipse(h.X(u + (k % 2) * .01), h.Y(-b + (t + b) * (.47 + k * .08)), r, r * .45, 0, 0, 7); c.fill(); }      // squat on the texture: the wrap stretches them round the girth
+        }
+        for (const s of [.9, .78]) lineAt(c, h, .16, .92, s, 'rgba(10,16,24,0.32)', 2.5);      // the ridges along the back
+        for (let i = 0; i < 5; i++) { const u = .165 + i * .011, [t, b] = h.prof(u); c.strokeStyle = 'rgba(8,12,18,0.6)'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(h.X(u), h.Y(-b + (t + b) * .7)); c.lineTo(h.X(u + .004), h.Y(-b + (t + b) * .46)); c.stroke(); }
+      },
+    },
+    blueWhale: {
+      name: '흰수염고래', en: 'Blue Whale', L: [22, 26], wK: 7.5, body: .9, pts: 2500, watch: true, wrap: true, fluke: true, swimV: true,
+      prof: [[0, .003, .004, .006], [.02, .014, .02, .03], [.08, .028, .045, .052], [.2, .045, .075, .066], [.35, .058, .08, .07], [.5, .06, .07, .066], [.65, .052, .054, .052], [.8, .034, .034, .03], [.92, .017, .017, .012], [1, .01, .01, .008]],
+      fins: [{ p: [[.74, .04], [.775, .062], [.79, .058], [.8, .036]] }],
+      tail: [[-.4, .01], [-.43, .05], [-.475, .115], [-.5, .118], [-.492, .06], [-.47, 0], [-.492, -.06], [-.5, -.118], [-.475, -.115], [-.43, -.05], [-.4, -.01]],
+      pec: { u: .27, y: -.045, sw: .95, dr: .5, pts: [[0, .022], [.05, .03], [.11, .018], [.125, .004], [.08, -.01], [0, -.02]] },
+      eye: { u: .16, y: -.014, r: .0042 },
+      style: { back: '#3a4e60', flank: '#4c6276', belly: '#8796a2', s: [.4, .6, .8], fin: '#33475a', iris: '#0c1014', tailCol: '#374b5d' },
+      extra(c, h) {
+        dots(c, h, 300, 'rgba(165,186,202,0.26)', 4, 15, .05, .98, .2, .98); dots(c, h, 120, 'rgba(20,30,42,0.2)', 5, 16, .1, .98, .3, .98);      // the mottling
+        for (let k = 0; k < 11; k++) lineAt(c, h, .03, .56, .03 + k * .034, 'rgba(18,28,38,0.42)', 2.2);      // throat pleats
+        lineAt(c, h, .0, .17, .46, 'rgba(8,12,18,0.55)', 3);      // the jaw line
+      },
+    },
+    hammerhead: {
+      name: '귀상어', en: 'Scalloped Hammerhead', L: [2.4, 3.1], wK: 8, body: .76, score: 1, watch: true,
+      prof: [[0, .006, .008, .012], [.05, .026, .024, .03], [.14, .05, .046, .05], [.3, .066, .06, .056], [.5, .06, .058, .048], [.72, .036, .036, .028], [.9, .02, .018, .014], [1, .015, .013, .011]],
+      fins: [
+        { p: [[.3, .058], [.35, .215], [.375, .21], [.4, .08], [.42, .056]] }, { p: [[.73, .032], [.755, .06], [.785, .032]] },
+        { p: [[.74, -.032], [.77, -.07], [.8, -.032]] }, { p: [[.58, -.046], [.62, -.085], [.65, -.04]] },
+      ],
+      tail: [[-.26, .014], [-.33, .07], [-.5, .25], [-.47, .12], [-.4, .03], [-.385, -.02], [-.44, -.09], [-.42, -.1], [-.33, -.045], [-.26, -.012]],
+      pec: { u: .25, y: -.04, sw: .85, dr: .45, pts: [[0, .04], [.09, .045], [.17, .012], [.18, 0], [.1, -.018], [0, -.03]] },
+      eye: { u: .036, y: 0, r: .0085, z: .128 }, hammer: { x: .472, len: .045, thick: .0115, span: .132 },
+      style: { back: '#6b6a5b', flank: '#86806d', belly: '#eceae4', s: [.4, .52, .62], fin: '#5b594d', iris: '#16171b' },
+      extra(c, h) { for (let i = 0; i < 5; i++) { const u = .19 + i * .012, [t, b] = h.prof(u); c.strokeStyle = 'rgba(15,16,18,0.55)'; c.lineWidth = 2.5; c.beginPath(); c.moveTo(h.X(u), h.Y(t * .2)); c.lineTo(h.X(u + .004), h.Y(-b * .45)); c.stroke(); } },
+    },
+    manta: { name: '만타가오리', en: 'Reef Manta Ray', L: [1.5, 2.1], wK: 95, pts: 600, watch: true, wing: true, geo: () => mantaGeo() },      // L = disc length; the wings span 2.2 L
+  });
   // real models (assets/fab.js, assets/life.js), already in fish space. `real` names the packed model; species without a
   // `prof` exist only when their pack is loaded (Fish.has). pts: flat score for a sighting. swimV: tail beats up and down.
   SP.tuna.real = 'fab_tuna'; SP.shark.real = 'fab_shark';
@@ -199,6 +257,7 @@
     orca: { name: '범고래', en: 'Orca', L: [4.2, 7.2], wK: 13, pts: 800, watch: true, real: 'fab_orca', swimV: true },
     spermWhale: { name: '향유고래', en: 'Sperm Whale', L: [13, 15], wK: 9, pts: 1500, watch: true, real: 'fab_spermwhale', swimV: true },
     mullet: { name: '숭어', en: 'Grey Mullet', L: [0.3, 0.48], wK: 12, score: 26, spear: true, school: true, real: 'fab_mullet' },
+    humpback: { name: '혹등고래', en: 'Humpback Whale', L: [12, 14], wK: 12, pts: 2000, watch: true, real: 'fab_humpback', swimV: true },
     seadragon: { name: '나뭇잎해룡', en: 'Weedy Seadragon', L: [0.3, 0.45], wK: 2.5, pts: 350, watch: true, real: 'fab_seadragon' },
     crab: { name: '청게', en: 'Blue Crab', L: [0.22, 0.34], wK: 14, score: 260, hand: true },      // L = leg span
     nudibranch: { name: '갯민숭달팽이', en: 'Nudibranch', L: [0.07, 0.11], wK: 30, pts: 150, watch: true },
@@ -241,11 +300,19 @@
     for (let j = 1; j < Mr - 1; j++) idx.push((N - 1) * Mr, (N - 1) * Mr + j, (N - 1) * Mr + j + 1);
     const body = new T.BufferGeometry();
     body.setAttribute('position', new T.BufferAttribute(pos, 3)); body.setIndex(idx); body.computeVertexNormals();
-    parts.push(projUV(body));
-    // median fins + tail (flat, in the XY plane)
+    if (sp.wrap) {      // wide, flat bodies: v runs round the girth (belly → flank → back) rather than with height, so the pattern is not smeared across the back
+      const uv = new Float32Array(N * Mr * 2);
+      for (let i = 0; i < N; i++) {
+        const [t, b] = profAt(sp, Math.pow(i / (N - 1), 1.08));
+        for (let j = 0; j < Mr; j++) { const s = 0.5 + Math.asin(Math.sin((j / Mr) * Math.PI * 2)) / Math.PI, o = (i * Mr + j) * 2; uv[o] = 0.5 - pos[(i * Mr + j) * 3]; uv[o + 1] = (-b + (t + b) * s + 0.25) / 0.5; }
+      }
+      body.setAttribute('uv', new T.BufferAttribute(uv, 2)); parts.push(body);
+    } else parts.push(projUV(body));
+    if (sp.hammer) { const hm = sp.hammer, g = new T.SphereGeometry(1, 14, 8); g.scale(hm.len, hm.thick, hm.span); g.translate(hm.x, 0, 0); parts.push(projUV(g)); }
+    // median fins + tail (flat, in the XY plane; a whale's flukes are laid over into XZ after they have taken their paint coordinates)
     const flat = (pts) => projUV(new T.ShapeGeometry(new T.Shape(pts.map((p) => new T.Vector2(p[0], p[1])))));
     for (const f of sp.fins) parts.push(flat(f.p.map(([u, y]) => [0.5 - u * sp.body, y])));
-    parts.push(flat(sp.tail));
+    const tail = flat(sp.tail); if (sp.fluke) tail.rotateX(-Math.PI / 2); parts.push(tail);
     // pectoral fins
     const pc = sp.pec, [, , pw] = profAt(sp, pc.u);
     for (const side of [1, -1]) {
@@ -264,7 +331,7 @@
     if (!lod) {
       const e = sp.eye, [, , ew] = profAt(sp, e.u);
       for (const side of [1, -1]) {
-        const g = G.xf(G.sph(e.r, 12, 8), [0.5 - e.u * sp.body, e.y, (ew * Math.sqrt(Math.max(1 - Math.pow(e.y / profAt(sp, e.u)[0], 2), 0.1)) - e.r * 0.45) * side], [side * Math.PI / 2, 0, 0]);
+        const g = G.xf(G.sph(e.r, 12, 8), [0.5 - e.u * sp.body, e.y, (e.z || ew * Math.sqrt(Math.max(1 - Math.pow(e.y / profAt(sp, e.u)[0], 2), 0.1)) - e.r * 0.45) * side], [side * Math.PI / 2, 0, 0]);
         parts.push(constUV(g, 6 / TW, 1 - 2 / TH, 60 / TH));
       }
     }
@@ -315,6 +382,50 @@
     }, { repeat: false, aniso: 8 });
   }
 
+  // manta ray, built by hand: two thin sheets (back and belly) that meet at the wing edges, a domed centre, cephalic fins, a whip tail.
+  // Model space: +x = head, the disc is 1 long and 2.2 across. Vertex colours: black above with pale shoulder bars, white below.
+  let _manta = null;
+  function mantaGeo() {
+    if (_manta) return _manta;
+    const NS = 44, NV = 16, HALF = 1.1, pos = [], col = [], idx = [], sm = (a, b, x) => { const t = M.sat((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+    const le = (s) => 0.48 - 0.55 * Math.pow(s, 1.35), te = (s) => -0.5 + 0.43 * Math.pow(s, 0.8);      // leading / trailing edge over the half-span s = 0..1
+    const mixc = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+    for (const top of [true, false]) {
+      const off = pos.length / 3;
+      for (let i = 0; i <= NS; i++) {
+        const sg = (i / NS) * 2 - 1, s = Math.abs(sg), x0 = le(s), ch = x0 - te(s);
+        for (let j = 0; j <= NV; j++) {
+          const v = j / NV, x = x0 - v * ch, z = sg * HALF, foil = Math.pow(Math.sin(Math.PI * Math.pow(v, 0.6)), 0.9);      // thickest a third of the way back
+          const th = ((0.012 + 0.1 * Math.exp(-s * s * 26)) * (1 - s * 0.6) + 0.02 * (1 - s)) * foil;
+          pos.push(x, (top ? th * 1.15 : -th * 0.8) + 0.03 * s * s, z);
+          const n = M.noise2(x * 9 + 3, z * 9), mouth = sm(0.05, 0.02, v) * sm(0.14, 0.1, s);
+          let c;
+          if (top) {
+            c = mixc([0.02, 0.024, 0.032], [0.045, 0.05, 0.06], n);
+            c = mixc(c, [0.3, 0.33, 0.37], sm(0.1, 0.2, s) * sm(0.6, 0.42, s) * sm(0.1, 0.2, v + (s - 0.3) * 0.5) * sm(0.52, 0.38, v + (s - 0.3) * 0.5) * (0.6 + 0.4 * n));      // shoulder bars
+          } else {
+            c = mixc([0.8, 0.8, 0.78], [0.3, 0.33, 0.37], sm(0.8, 0.98, v) * (0.5 + 0.5 * n) + sm(0.75, 1, s) * 0.5);      // grey toward the trailing edge and tips
+            const slit = sm(0.12, 0.15, s) * sm(0.3, 0.27, s) * sm(0.16, 0.2, v) * sm(0.62, 0.58, v) * (((v - 0.2) / 0.085) % 1 < 0.22 ? 1 : 0);      // five gill slits a side
+            c = mixc(c, [0.07, 0.07, 0.08], slit);
+            c = mixc(c, [0.1, 0.1, 0.12], sm(0.62, 0.72, M.noise2(x * 13 + 9, z * 13 + 4)) * sm(0.3, 0.6, v) * sm(0.5, 0.1, s) * 0.8);      // belly blotches
+          }
+          c = mixc(c, [0.012, 0.012, 0.016], mouth); col.push(c[0], c[1], c[2]);
+        }
+      }
+      for (let i = 0; i < NS; i++) for (let j = 0; j < NV; j++) { const a = off + i * (NV + 1) + j, b = a + NV + 1; if (top) idx.push(a, a + 1, b, a + 1, b + 1, b); else idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    }
+    const wing = new T.BufferGeometry();
+    wing.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); wing.setAttribute('color', new T.Float32BufferAttribute(col, 3));
+    wing.setAttribute('uv', new T.Float32BufferAttribute(new Float32Array((pos.length / 3) * 2), 2)); wing.setIndex(idx); wing.computeVertexNormals();
+    const parts = [wing, G.tint(G.xf(G.cyl(0.003, 0.013, 0.8, 6), [-0.86, 0.012, 0], [0, 0, Math.PI / 2]), 0x0b0c10)];      // whip tail
+    for (const sd of [1, -1]) {
+      parts.push(G.tint(G.xf(G.sph(1, 10, 6), [0.535, -0.012, sd * 0.15], [0, sd * 0.22, 0.25], [0.085, 0.011, 0.03]), 0x15171c));      // cephalic fin, rolled forward
+      parts.push(G.tint(G.xf(G.sph(0.012, 8, 6), [0.415, 0.022, sd * 0.178]), 0x050506));      // eye
+    }
+    const g = G.merge(parts); g.computeBoundingSphere(); g.boundingSphere.radius *= 1.2;
+    return (_manta = g);
+  }
+
   // vertex deformation shared by every fish material (uSwim: phase, amplitude, bend, -)
   const SWIM = /* glsl */ `
 uniform vec4 uSwim;
@@ -326,7 +437,7 @@ float swimSlope(float x, float ph){ return (swimOff(x + 0.01, ph) - swimOff(x - 
   const Fish = (DB.Fish = {
     SWIM, profAt,
     // can this species be built? (procedural ones always; the others need their pack)
-    has(key) { const sp = SP[key]; return !!sp && (!!sp.prof || (!!sp.real && DB.Assets.has(sp.real))); },
+    has(key) { const sp = SP[key]; return !!sp && (!!sp.prof || !!sp.geo || (!!sp.real && DB.Assets.has(sp.real))); },
     // { geo, tex, nor, col }. tex is null and col true for models that carry vertex colours instead of a texture
     get(key, lod = false) {
       const id = key + (lod ? '_lod' : '');
@@ -336,6 +447,7 @@ float swimSlope(float x, float ph){ return (swimOff(x + 0.01, ph) - swimOff(x - 
         geo.computeBoundingSphere(); geo.boundingSphere.radius *= 1.25;
         cache[id] = { geo, tex: m.map, nor: m.normalMap, col: !!part.col };
       }
+      if (!cache[id] && SP[key].geo) cache[id] = { geo: SP[key].geo(), tex: null, col: true };      // hand-built, vertex-coloured
       if (!cache[id]) cache[id] = { geo: buildGeo(SP[key], lod), tex: (cache[key] && cache[key].tex) || paint(SP[key]) };
       return cache[id];
     },

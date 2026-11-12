@@ -24,6 +24,9 @@ attribute float aRock; varying float vRock;
 #ifdef FLAP
 uniform vec4 uFlap;         // stroke phase, amplitude
 #endif
+#ifdef WING
+uniform vec4 uFlap;         // stroke phase, amplitude
+#endif
 #ifdef OCTO
 attribute vec2 aArm;        // distance along the arm (0 = body), phase
 uniform vec4 uOcto;         // time, writhe amplitude, jet (0 = arms spread on the rock, 1 = trailing behind the mantle)
@@ -56,6 +59,12 @@ void main(){
     float front = smoothstep(0.02, 0.2, position.x), reach = max(abs(position.z) - 0.2, 0.0);
     p.y += fl * (front * sin(uFlap.x - reach * 2.5) * uFlap.y * (0.25 + reach * 2.2) + (1.0 - front) * sin(uFlap.x + 1.6) * uFlap.y * 0.14);
     p.x += fl * front * cos(uFlap.x) * uFlap.y * reach * 0.7;
+  }
+#endif
+#ifdef WING
+  {     // manta (+x = head, wings along z, half-span 1.1): the beat is a wave that runs out to the tips
+    float w = abs(position.z) / 1.1, k = w * w * (3.0 - 2.0 * w), ph = uFlap.x - w * 2.4;
+    p.y += sin(ph) * uFlap.y * k; p.z *= 1.0 - 0.12 * k * (0.5 - 0.5 * cos(ph));
   }
 #endif
 #ifdef OCTO
@@ -165,7 +174,7 @@ void main(){
 
   const UW = (DB.UW = {
     torch: torchU,
-    // o: { map, normalMap, normalFlip, color, vertexColors, uv, detail, detailScale, silver, swim, swimV, instPhase, sway:[amp,h], alphaTest, side, tint, emis, flap, octo, terrain:{...} }
+    // o: { map, normalMap, normalFlip, color, vertexColors, uv, detail, detailScale, silver, swim, swimV, instPhase, sway:[amp,h], alphaTest, side, tint, emis, flap, wing, octo, terrain:{...} }
     material(o = {}) {
       const defines = {};
       if (o.map) defines.USE_MAP = 1;
@@ -178,6 +187,7 @@ void main(){
       if (o.sway) defines.SWAY = 1;
       if (o.terrain) defines.TERRAIN = 1;
       if (o.flap) defines.FLAP = 1;
+      if (o.wing) defines.WING = 1;
       if (o.octo) defines.OCTO = 1;
       const u = Object.assign({
         uColor: { value: new T.Color(o.color === undefined ? 0xffffff : o.color) }, uTint: { value: new T.Color(o.tint === undefined ? 0xffffff : o.tint) },

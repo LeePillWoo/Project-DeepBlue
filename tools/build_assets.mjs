@@ -96,6 +96,7 @@ const texFn = (cfg, { gl, bin, inc, id }) => async (ti, kind) => {
     buf = await get(ent.url, `${id}_${cfg.res}_${path.basename(uri)}`);
   }
   if (cfg.bleed && kind === 'diff') buf = await bleedWhite(buf);
+  if (cfg.grade && kind === 'diff') buf = await sharp(buf).modulate({ saturation: cfg.grade.sat, brightness: cfg.grade.bright || 1 }).png().toBuffer();
   return webp(buf, cfg.tex[kind], kind === 'nor' ? 86 : 80, kind === 'nor');
 };
 

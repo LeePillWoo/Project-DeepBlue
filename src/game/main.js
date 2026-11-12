@@ -195,6 +195,12 @@
       A.play('spray', { s: M.clamp(1.1 - d.d / 110, 0.05, 0.8) });
       if (d.first) UI.toast(d.key === 'orca' ? '물 위로 검은 등지느러미가 솟습니다 — 범고래 무리!' : '멀리서 물기둥이 솟습니다 — 고래입니다!', 'good', 5);
     });
+    on('breach', (d) => {
+      if (d.under) { if (d.phase === 'in') A.play('thud'); return; }
+      const k = M.clamp(1.25 - d.d / 90, 0.15, 1);
+      if (d.phase === 'out') { A.play('splash', { s: 1.4 * k, delay: Math.min(d.d / 340, 0.6) }); UI.toast('혹등고래가 수면 위로 솟구칩니다!', 'good', 5); }
+      else { A.play('slam', { s: 1.3 * k }); A.play('spray', { s: k }); G.shake = Math.max(G.shake, 0.5 * k); }
+    });
     // under way
     on('slam', (k) => { A.play('slam', { s: Math.min(k, 1.3) }); G.shake = Math.max(G.shake, k); if (G.drive) G.wet = Math.max(G.wet, 0.35 + k * 0.4); });
     on('bowSplash', (k) => { A.play('spray', { s: k }); G.shake = Math.max(G.shake, k * 0.35); });
@@ -483,6 +489,13 @@
       near(0); const still = crab.run <= 0, x0 = crab.pos.x; near(2.4);
       check('crab holds for a slow approach and runs from a rush', still && crab.run > 0 && Math.abs(crab.pos.x - x0) + Math.abs(crab.pos.z - crab.home.z) > 0.1, `still ${still}, ran ${Math.hypot(crab.pos.x - x0, crab.pos.z - crab.home.z).toFixed(2)} m`);
     }
+    // --- the whale shark is solid: you cannot swim through it
+    const ws = D.meets.find((m) => m.key === 'whaleShark');
+    if (ws) {
+      D.pos.copy(ws.pos); D.vel.set(0, 0, 0); tick(1 / 60);
+      const gap = D.pos.distanceTo(ws.pos);
+      check('whale shark is solid', gap > ws.L * 0.05 && gap < 3, `pushed ${gap.toFixed(2)} m out of a ${ws.L.toFixed(1)} m body`);
+    }
     leaveWater('board'); UI.dropCatches(UI.session.length);
 
     // --- the orca pod passes the boat: close but clear of the hull, blows, and is logged once it is looked at
@@ -495,6 +508,16 @@
       }
       DB.debug.view = null;
       check('orca pod passes the boat and enters the field guide', logged === 'orca' && blows >= 3 && dWild > 12 && dWild < 60 && !DB.Wild.pass, `logged ${logged || 'nothing'}, ${blows} blows, closest ${dWild.toFixed(0)} m`);
+    }
+    // --- the humpback breaches at the closest point of its pass: clear of the water, and back in with a crash
+    const brs = []; let apex = -9; DB.on('breach', (d) => brs.push(d.phase));
+    if (DB.debug.wild('humpback')) {
+      for (let i = 0; i < 60 * 130 && DB.Wild.pass; i++) {
+        const an = DB.Wild.pass.g.list[0]; DB.debug.view = { p: [B.group.position.x, 2.2, B.group.position.z], t: [an.pos.x, an.pos.y, an.pos.z] };
+        tick(1 / 60); apex = Math.max(apex, an.pos.y);
+      }
+      DB.debug.view = null;
+      check('humpback breaches beside the boat', brs.join() === 'out,in' && apex > 1.8 && apex < 4 && logged === 'humpback', `events ${brs.join('→') || 'none'}, body centre peaked ${apex.toFixed(1)} m above the sea, logged ${logged}`);
     }
     const blank = DB.Dex.list.filter((e) => e.img.length < 3000).map((e) => e.key);
     check(`all ${DB.Dex.list.length} field-guide entries have a portrait`, !blank.length, blank.length ? 'missing: ' + blank.join(', ') : 'ok');

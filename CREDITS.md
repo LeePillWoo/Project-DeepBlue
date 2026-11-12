@@ -9,6 +9,7 @@
 - **Turtle** — Forge of Fantasy · [Fab](https://www.fab.com/listings/aab6ba52-b725-4b90-9f30-198fbd04b6f2) · `fab_turtle`
 - **Treasure Chest** — GG Beta Pie · [Fab](https://www.fab.com/listings/e3f0dd88-fc48-44fc-9982-c37c98a3c11c) · `fab_chest`
 - **Day#67: Weedy Seadragon** — JuanG3D · [Fab](https://www.fab.com/listings/040549a1-e281-46f2-b564-525776941598) · `fab_seadragon`
+- **Free Stylized Whales🐳** — LapaModels · [Fab](https://www.fab.com/listings/55667f5c-4e2c-4ca9-907f-1f3d65134e52) · `fab_humpback`
 - **Lighthouse** — DylanHayes · [Fab](https://www.fab.com/listings/42454f1c-67a2-4460-bd41-741aeb6ecf3f) · `lighthouse`
 - **Plant Series – Palm Tree** — UPWARD · [Fab](https://www.fab.com/listings/0f9f40f9-e23b-4057-8525-f8651976f252) · `palm`
 - **Fishing Boat** — Charlie catling · [Fab](https://www.fab.com/listings/ecef8ba7-5115-4b72-a908-2c088caaca9b) · `npc_boat_aberdeen`

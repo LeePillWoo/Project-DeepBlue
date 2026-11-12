@@ -1,12 +1,13 @@
 // Project Deep Blue — spearfishing: diver controller, oxygen/depth, speargun + drag ballistics, reef fish AI, schools, sharks, jellyfish,
-// things to gather (urchins, shells, crabs), the octopus, and the animals you only meet (turtles, pyjama sharks, seadragons, nudibranchs).
+// things to gather (urchins, shells, crabs), the octopus, and the animals you only meet (turtles, pyjama sharks, seadragons, nudibranchs,
+// a whale shark, mantas, the hammerhead school round the wreck).
 (function () {
   'use strict';
   const DB = window.DB, T = THREE, M = DB.M, G = DB.G;
   const V3 = (x, y, z) => new T.Vector3(x, y, z);
   const YAX = V3(0, 1, 0), _a = V3(), _b = V3(), _c = V3(), _d = V3(), _e = new T.Euler(0, 0, 0, 'YZX'), _q = new T.Quaternion(), _m = new T.Matrix4(), _s = V3();
   const f0 = V3(), f1 = V3(), s0 = V3(), s1 = V3();      // segment end points handed to segDist (which owns _a.._d)
-  const SILVER = { jack: 1.0, amberjack: 0.9, tuna: 1.0, marlin: 0.85, sailfish: 0.8, mahi: 0.7, seabream: 0.5, parrotfish: 0.3, grouper: 0.14, giantGrouper: 0.12, shark: 0.28, greatWhite: 0.3, pyjama: 0.1, mullet: 0.9, seadragon: 0.03, orca: 0.16, spermWhale: 0.06 };
+  const SILVER = { jack: 1.0, amberjack: 0.9, tuna: 1.0, marlin: 0.85, sailfish: 0.8, mahi: 0.7, seabream: 0.5, parrotfish: 0.3, grouper: 0.14, giantGrouper: 0.12, shark: 0.28, greatWhite: 0.3, pyjama: 0.1, mullet: 0.9, seadragon: 0.03, whaleShark: 0.1, hammerhead: 0.26, manta: 0.05 };
   // behaviour: shy = flee radius (m), cruise / burst speed (m/s), hp, hover height above the seabed, roam radius
   const AI = {
     grouper: { shy: 2.6, cruise: 0.45, burst: 3.6, hp: 95, hover: 0.9, roam: 5 }, giantGrouper: { shy: 2.0, cruise: 0.35, burst: 3.0, hp: 210, hover: 1.4, roam: 6 },
@@ -134,7 +135,8 @@
 
     // ---------------------------------------------------------------- creatures
     makeFish(key, L) {
-      const f = DB.Fish.get(key), mat = DB.UW.material({ map: f.tex, vertexColors: f.col, swim: true, swimV: DB.Species[key].swimV, silver: SILVER[key] || 0.5, side: T.DoubleSide });
+      const f = DB.Fish.get(key), sp = DB.Species[key];
+      const mat = DB.UW.material({ map: f.tex, vertexColors: f.col, swim: !sp.wing, swimV: sp.swimV, wing: sp.wing, silver: SILVER[key] || 0.5, side: T.DoubleSide });
       const mesh = new T.Mesh(f.geo, mat); mesh.scale.setScalar(L); mesh.rotation.order = 'YZX'; mesh.frustumCulled = false;
       return mesh;
     },
@@ -179,6 +181,16 @@
         const mesh = this.makeFish(key, L); R.group.add(mesh);
         this.sharks.push({ key, mesh, L, pos, vel: V3(), head: 0, pitch: 0, state: 'patrol', timer: 70 + i * 80, ang: i * 3, phase: 0, orbit: 9, radius: 0.34, hits: 0, big: key === 'greatWhite' });
       });
+      // hammerheads circle the wreck in a loose school. The first of them is also in `sharks`: linger near it and it peels off after you
+      if (DB.Fish.has('hammerhead')) {
+        const hs = (this.hammers = { ang: 0, cx: R.wreck.x, cz: R.wreck.z, list: [] });
+        for (let i = 0; i < 7; i++) {
+          const L = 2.4 + rnd() * 0.7, mesh = this.makeFish('hammerhead', L); R.group.add(mesh);
+          hs.list.push({ mesh, L, a: i * 0.27 + rnd() * 0.1, r: 16 + (i % 3) * 2.6 + rnd(), up: 3.5 + (i % 4) * 1.5 + rnd(), phase: rnd() * 6, pos: V3(), goal: V3() });
+        }
+        const lead = hs.list[0];
+        this.sharks.push({ key: 'hammerhead', mesh: lead.mesh, L: lead.L, pos: lead.pos, vel: V3(), head: 0, pitch: 0, state: 'patrol', timer: 5, ang: 0, phase: 0, orbit: 9, radius: 0.3, hits: 0, slot: lead });
+      }
       // jellyfish
       const bell = new T.LatheGeometry([[0.0, 0.26], [0.1, 0.25], [0.2, 0.2], [0.27, 0.1], [0.29, 0.0], [0.25, -0.04], [0.2, -0.02]].map((p) => new T.Vector2(p[0], p[1])), 16), parts = [bell];
       for (let i = 0; i < 9; i++) { const a = (i / 9) * 6.283, r0 = 0.16 + (i % 3) * 0.035; parts.push(G.tube([V3(Math.cos(a) * r0, -0.02, Math.sin(a) * r0), V3(Math.cos(a) * r0 * 0.9, -0.4, Math.sin(a) * r0 * 0.9), V3(Math.cos(a + 0.4) * r0 * 0.7, -0.85, Math.sin(a + 0.4) * r0 * 0.7), V3(Math.cos(a + 0.2) * r0 * 0.6, -1.3, Math.sin(a + 0.2) * r0 * 0.6)], 0.006, 4, false, 10)); }
@@ -245,15 +257,18 @@
         { key: 'turtle', n: 2, v: [0.62, 1.9], alt: [2.5, 8.5], floor: 0.9, turn: 1.6, roam: 0, see: 4, rad: 0.3, has: A.has('fab_turtle') },
         { key: 'pyjama', n: 2, v: [0.32, 1.6], alt: [0.3, 0.8], floor: 0.24, turn: 1.4, roam: 0, see: 3, rad: 0.18, has: DB.Fish.has('pyjama') },
         { key: 'seadragon', n: 3, v: [0.1, 0.4], alt: [0.5, 1.5], floor: 0.35, turn: 0.9, roam: 4, see: 2.2, rad: 0.12, has: DB.Fish.has('seadragon') },
+        // glide: steered by heading in wide arcs (big animals do not turn on the spot). top: how close to the surface. at: where each one starts
+        { key: 'whaleShark', n: 1, v: [0.75, 1.2], alt: [5, 9], floor: 2.8, top: -3.4, turn: 0.3, glide: true, see: 9, rad: 0.075, has: true, at: [[30, -26]] },
+        { key: 'manta', n: 2, v: [0.95, 2.3], alt: [3, 7], floor: 1.3, top: -1.8, turn: 0.6, glide: true, see: 6, rad: 0.22, has: true, at: [[-26, -22], [14, 36]] },
       ];
       this.meets = [];
       for (const k of MEET) if (k.has) for (let i = 0; i < k.n; i++) {
         const sp = DB.Species[k.key], L = sp.L[0] + rnd() * (sp.L[1] - sp.L[0]);
         const mesh = k.key === 'turtle' ? new T.Mesh(A.geo('fab_turtle', 0), UW.material({ vertexColors: true, flap: true, detail: R.detailTex, detailScale: 3.5 })) : this.makeFish(k.key, L);
         mesh.rotation.order = 'YZX'; mesh.frustumCulled = false; mesh.scale.setScalar(L); R.group.add(mesh);
-        const h = k.roam ? spot(false, 40) || { x: 6 + i * 7, z: 9 } : { x: -8 + i * 26 + (k.key === 'pyjama' ? 15 : 0), z: 8 - i * 24 };
-        const y = Math.min(W.height(h.x, h.z) + k.alt[0] + rnd() * (k.alt[1] - k.alt[0]), -1.8);
-        this.meets.push({ key: k.key, k, sp, mesh, L, kg: sp.wK * L * L * L, home: V3(h.x, y, h.z), pos: V3(h.x, y, h.z), vel: V3(), goal: V3(h.x, y, h.z), head: rnd() * 6.28, pitch: 0, timer: 0, phase: rnd() * 6, scare: 0, radius: k.rad * L });
+        const h = k.at ? { x: k.at[i][0], z: k.at[i][1] } : k.roam ? spot(false, 40) || { x: 6 + i * 7, z: 9 } : { x: -8 + i * 26 + (k.key === 'pyjama' ? 15 : 0), z: 8 - i * 24 };
+        const y = Math.min(W.height(h.x, h.z) + k.alt[0] + rnd() * (k.alt[1] - k.alt[0]), (k.top || -1.4) - 0.4);
+        this.meets.push({ key: k.key, k, sp, mesh, L, kg: sp.wK * L * L * L, home: V3(h.x, y, h.z), pos: V3(h.x, y, h.z), vel: V3(), goal: V3(h.x, y, h.z), head: rnd() * 6.28, dir: rnd() * 6.28, pitch: 0, timer: 0, phase: rnd() * 6, scare: 0, radius: k.rad * L });
       }
       // the pirates' chest, half sunk in the sand beside the wreck
       if (A.has('fab_chest')) {
@@ -366,22 +381,32 @@
       for (const t of this.meets) {
         const k = t.k;
         t.timer -= dt; t.scare = Math.max(t.scare - dt, 0);
-        if (t.timer <= 0 || t.pos.distanceToSquared(t.goal) < (k.roam ? 0.3 : 2)) {
-          const a = Math.random() * 6.283, d = k.roam ? Math.random() * k.roam : 8 + Math.random() * 38;
-          t.goal.set((k.roam ? t.home.x : 0) + Math.cos(a) * d, 0, (k.roam ? t.home.z : 0) + Math.sin(a) * d);
-          t.goal.y = Math.min(W.height(t.goal.x, t.goal.z) + k.alt[0] + Math.random() * (k.alt[1] - k.alt[0]), -1.8); t.timer = 14 + Math.random() * 14;
+        const top = k.top || -1.4;
+        if (t.timer <= 0 || t.pos.distanceToSquared(t.goal) < (k.glide ? 36 : k.roam ? 0.3 : 2)) {
+          if (k.glide) {      // on roughly as it is heading, or back over the reef once it has strayed
+            const a = Math.hypot(t.pos.x, t.pos.z) > 40 ? Math.atan2(-t.pos.z, -t.pos.x) + (Math.random() - 0.5) * 1.3 : t.dir + (Math.random() - 0.5) * 2.2, d = 22 + Math.random() * 20;
+            t.goal.set(t.pos.x + Math.cos(a) * d, 0, t.pos.z + Math.sin(a) * d);
+          } else {
+            const a = Math.random() * 6.283, d = k.roam ? Math.random() * k.roam : 8 + Math.random() * 38;
+            t.goal.set((k.roam ? t.home.x : 0) + Math.cos(a) * d, 0, (k.roam ? t.home.z : 0) + Math.sin(a) * d);
+          }
+          t.goal.y = Math.min(W.height(t.goal.x, t.goal.z) + k.alt[0] + Math.random() * (k.alt[1] - k.alt[0]), top - 0.4); t.timer = 14 + Math.random() * 14;
         }
-        const to = _a.subVectors(t.goal, t.pos), tl = to.length() || 1;
-        t.vel.lerp(to.multiplyScalar(k.v[t.scare > 0 ? 1 : 0] / tl), 1 - Math.exp(-0.8 * dt)); t.pos.addScaledVector(t.vel, dt);
-        const fl = W.height(t.pos.x, t.pos.z) + k.floor; if (t.pos.y < fl) t.pos.y = fl; if (t.pos.y > -1.4) t.pos.y = -1.4;
+        const to = _a.subVectors(t.goal, t.pos), tl = to.length() || 1, spd = k.v[t.scare > 0 ? 1 : 0];
+        if (k.glide) { t.dir = M.dampAngle(t.dir, Math.atan2(to.z, to.x), k.turn, dt); t.vel.set(Math.cos(t.dir) * spd, M.clamp(to.y * 0.25, -0.35, 0.35), Math.sin(t.dir) * spd); }
+        else t.vel.lerp(to.multiplyScalar(spd / tl), 1 - Math.exp(-0.8 * dt));
+        t.pos.addScaledVector(t.vel, dt);
+        const fl = W.height(t.pos.x, t.pos.z) + k.floor; if (t.pos.y < fl) t.pos.y = fl; if (t.pos.y > top) t.pos.y = top;
         for (const c of DB.Reef.colliders) { const dx = t.pos.x - c.x, dy = t.pos.y - c.y, dz = t.pos.z - c.z, d2 = dx * dx + dy * dy + dz * dz, rr = c.r + t.radius; if (d2 < rr * rr && d2 > 1e-6) { const q = rr / Math.sqrt(d2) - 1; t.pos.x += dx * q; t.pos.y += dy * q; t.pos.z += dz * q; } }      // round the boulders, not through them
         const hs = Math.hypot(t.vel.x, t.vel.z);
-        if (hs > 0.03) t.head = M.dampAngle(t.head, yawOf(t.vel.x, t.vel.z), k.turn, dt);
+        if (hs > 0.03) t.head = M.dampAngle(t.head, yawOf(t.vel.x, t.vel.z), k.glide ? 3 : k.turn, dt);
         t.pitch = M.damp(t.pitch, Math.atan2(t.vel.y, Math.max(hs, 0.2)) * 0.7, 2, dt);
         t.mesh.position.copy(t.pos);
         const u = t.mesh.material.uniforms;
         if (t.key === 'turtle') { t.phase += dt * (1.5 + t.vel.length() * 1.6); t.mesh.rotation.set(Math.sin(t.phase * 0.5) * 0.06, t.head, t.pitch); u.uFlap.value.set(t.phase, 0.34, 0, 0); }
-        else { t.phase += dt * (1.2 + t.vel.length() * 6); t.mesh.rotation.set(0, t.head, t.pitch); u.uSwim.value.set(t.phase, t.key === 'seadragon' ? 0.22 : 0.75, 0, 0); }
+        else if (t.key === 'manta') { t.phase += dt * (1.1 + t.vel.length() * 0.9); t.mesh.rotation.set(0, t.head, t.pitch); u.uFlap.value.set(t.phase, 0.3, 0, 0); }
+        else { t.phase += dt * (t.L > 3 ? 1.3 : 1.2 + t.vel.length() * 6); t.mesh.rotation.set(0, t.head, t.pitch); u.uSwim.value.set(t.phase, t.key === 'seadragon' ? 0.22 : t.L > 3 ? 0.5 : 0.75, 0, 0); }
+        if (t.L > 3) this.bump(t.pos, t.head, t.L, t.L * 0.075);
         if (!this.seen.has(t) && t.pos.distanceToSquared(P) < k.see * k.see) { this.seen.add(t); DB.emit('catch', { key: t.key, L: t.L, kg: t.kg, method: 'watch' }); }
       }
       // --- crabs sidle off when rushed; drift in slowly and they hold still
@@ -416,8 +441,16 @@
       if (key === 'starfish' && A.has('fab_starfish')) { const o = A.object('fab_starfish'); o.rotation.x = 0.8; return o; }
       if (key === 'treasure' && A.has('fab_chest')) { const o = A.object('fab_chest'); o.rotation.y = 2.3; return o; }
       if (key === 'crab' && A.has('fab_crab')) { const o = A.object('fab_crab'); o.rotation.y = 0.5; return o; }
+      if (key === 'manta') { const m = new T.Mesh(DB.Fish.get('manta').geo, std({ vertexColors: true, side: T.DoubleSide, roughness: 0.5 })); m.rotation.set(0.25, 0.7, 0); return m; }
       if (key === 'nudibranch' && A.has('fab_seaslug')) { const o = A.object('fab_seaslug'); o.rotation.y = -0.6; return o; }
       return null;
+    },
+    // big bodies are solid: push the diver out of a capsule laid along the animal (whoever owns it calls this every frame)
+    bump(pos, head, L, r) {
+      const P = this.pos, fx = Math.cos(head), fz = -Math.sin(head), ax = pos.x - fx * L * 0.42, az = pos.z - fz * L * 0.42, bx = fx * L * 0.87, bz = fz * L * 0.87;
+      const t = M.sat(((P.x - ax) * bx + (P.z - az) * bz) / (bx * bx + bz * bz)), dx = P.x - (ax + bx * t), dy = P.y - pos.y, dz = P.z - (az + bz * t), d = Math.hypot(dx, dy, dz);
+      const rr = r * (0.45 + 0.75 * Math.sin(Math.PI * Math.min(t * 1.2, 1))) + 0.4;      // slimmer toward the tail
+      if (d < rr && d > 1e-4) { const k = rr / d - 1; P.x += dx * k; P.y += dy * k; P.z += dz * k; }
     },
     // where the boarding ladder is
     ladder(out) { return out.set(0, 0, 4.7).applyMatrix4(DB.Boat.group.matrixWorld); },
@@ -434,6 +467,7 @@
       this.resetExtras();
       this.sharks.forEach((s, i) => { s.state = 'patrol'; s.hits = 0; s.timer = 65 + i * 70 + Math.random() * 30; });      // time to hunt before the first one turns up
       this.danger = 0;
+      this.updateHammers(0); for (const s of this.sharks) if (s.slot) s.pos.copy(s.slot.goal);      // the hammerhead that can turn on you starts in its place in the school
       this.targets = this.targets.filter((f) => { if (f.escapee) { DB.Reef.group.remove(f.mesh); return false; } return true; });
       if (opts.chase) this.spawnEscapee(opts.chase);
       DB.FX.clear(); DB.FX.bubbles(this.pos.x, this.pos.y + 0.6, this.pos.z, 170, 1.6, 0.05, 1.2);
@@ -507,7 +541,7 @@
       this.findLock(fw);
       this.updateSpear(dt, inp, fw);
       // --- life
-      this.updateTargets(dt, sp); this.updateSchools(dt); this.updateSharks(dt); this.updateJellies(dt); this.updateExtras(dt, inp, fw, sp);
+      this.updateTargets(dt, sp); this.updateSchools(dt); this.updateHammers(dt); this.updateSharks(dt); this.updateJellies(dt); this.updateExtras(dt, inp, fw, sp);
       this.prompt = this.canBoard() ? 'board' : '';
     },
 
@@ -596,7 +630,7 @@
         else { f.state = 'flee'; f.timer = 4; f.vel.copy(S.vel).setLength(f.ai.burst); DB.emit('spearHit', { kill: false, key: f.key }); }
       }
       // blood draws sharks
-      for (const sh of this.sharks) if (sh.state === 'patrol' && Math.random() < (sh.big ? 0.18 : 0.55)) { sh.state = 'approach'; sh.timer = 26 + Math.random() * 12; sh.orbit = 10; DB.emit('sharkNear', sh); }
+      for (const sh of this.sharks) if (sh.state === 'patrol' && (!sh.slot || sh.pos.distanceToSquared(this.pos) < 1600) && Math.random() < (sh.big ? 0.18 : 0.55)) { sh.state = 'approach'; sh.timer = 26 + Math.random() * 12; sh.orbit = 10; DB.emit('sharkNear', sh); }
       S.state = 'back'; S.t = -0.3;
     },
     bagFish(f) {
@@ -674,12 +708,31 @@
       for (const im of this.schoolMeshes) im.instanceMatrix.needsUpdate = true;
     },
 
+    // the school round the wreck: each keeps its place on a slow circle (the first one's place is only where it returns to — see updateSharks)
+    updateHammers(dt) {
+      const hs = this.hammers; if (!hs) return;
+      const P = this.pos, W = DB.World; hs.ang += dt * 0.05; let near = 1e9;
+      hs.list.forEach((m, i) => {
+        const a = hs.ang + m.a, x = hs.cx + Math.cos(a) * m.r, z = hs.cz + Math.sin(a) * m.r;
+        m.goal.set(x, Math.min(W.height(x, z) + m.up + Math.sin(this.t * 0.2 + i) * 0.7, -3), z);
+        if (i > 0) {
+          m.pos.copy(m.goal); m.phase += dt * 3.3;
+          m.mesh.position.copy(m.pos); m.mesh.rotation.set(0, yawOf(-Math.sin(a), Math.cos(a)), 0); m.mesh.material.uniforms.uSwim.value.set(m.phase, 0.7, 0, 0);
+        }
+        near = Math.min(near, m.pos.distanceToSquared(P));
+      });
+      if (dt > 0 && !this.seen.has(hs) && near < 121) { this.seen.add(hs); const L = hs.list[1].L; DB.emit('catch', { key: 'hammerhead', L, kg: DB.Species.hammerhead.wK * L * L * L, method: 'watch' }); }
+    },
+
     updateSharks(dt) {
       const P = this.pos, W = DB.World; let nearest = 99, danger = 0;
       for (const s of this.sharks) {
         s.timer -= dt; let speed = 1.5; const goal = _a;
         const dist = s.pos.distanceTo(P);
-        if (s.state === 'patrol') {
+        if (s.state === 'patrol' && s.slot) {      // with the school; five seconds of company is all it tolerates
+          goal.copy(s.slot.goal); if (dist > 13) s.timer = 5;
+          if (s.timer <= 0) { s.state = 'approach'; s.timer = 16 + Math.random() * 8; s.orbit = 9; DB.emit('sharkNear', s); }
+        } else if (s.state === 'patrol') {
           s.ang += dt * 0.022; goal.set(Math.cos(s.ang) * 62 - 16, -13 - 5 * Math.sin(s.ang * 3), Math.sin(s.ang) * 62 + 12);
           if (s.timer <= 0) { s.state = 'approach'; s.timer = 22 + Math.random() * 14; s.orbit = 11; DB.emit('sharkNear', s); }
         } else if (s.state === 'approach') {     // circle in, tightening
