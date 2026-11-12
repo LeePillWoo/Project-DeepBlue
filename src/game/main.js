@@ -153,7 +153,9 @@
     on('hook', () => { UI.toast('훅업! 파이팅 시작', 'good', 2.4); A.play('bite'); DB.Sea.excite(25); });
     on('splash', (d) => A.play('splash', { s: d.s, delay: Math.min(d.d / 340, 0.6) }));
     on('surge', () => UI.toast('보트를 보고 마지막으로 내달립니다!', 'warn', 2.5));
-    on('missed', () => UI.toast('놓쳤습니다 — 입질이 오면 바로 챔질하세요', 'warn'));
+    on('missed', () => UI.toast('놓쳤습니다 — 확 끌고 갈 때 바로 챔질하세요 (누르고 있던 버튼은 떼었다 다시)', 'warn'));
+    on('early', () => { A.play('lost'); UI.toast('너무 일찍 챔질했습니다 — 물고기가 놀라 달아났습니다', 'warn'); });
+    on('lostInterest', () => UI.toast('입질이 끊겼습니다… 루어를 살짝 움직여 보세요', '', 2.6));
     on('snap', () => { A.play('snap'); G.chaseT = 14; UI.toast('줄이 끊어졌습니다!', 'bad', 4); });
     on('lost', () => { A.play('lost'); UI.toast('바늘이 빠졌습니다 — 텐션을 유지하세요', 'warn', 4); });
     on('landing', () => { UI.hint(''); UI.toast('랜딩!', 'good', 2); });
@@ -397,6 +399,25 @@
     check('spear travels 9–14 m in its first second', x > 9 && x < 14, x.toFixed(1) + ' m');
     if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard();
     UI.dropCatches(UI.session.length);      // test catches don't belong in the player's log
+
+    // --- the bite: nibbles first, a fresh strike on the run hooks, holding the button or striking early does not
+    const ev = {}; for (const e of ['nibble', 'bite', 'early', 'hook', 'lostInterest']) DB.on(e, () => { ev[e] = (ev[e] || 0) + 1; });
+    const waitFor = (policy, maxT) => {
+      for (const k in ev) ev[k] = 0;
+      F.state = 'wait'; F.count = 5; F.tease = null; F.holdT = 0; F.biteT = 0.2; F.lurePos.copy(F.tip).add(v1.set(-40, 0, 50)); F.lurePos.y = 0;
+      let t = 0, prev = false;
+      while (t < maxT && F.state !== 'fight' && F.state !== 'idle') { const down = policy(t); if (down && !prev) DB.debug.mouse(true, 0); else if (!down && prev) DB.debug.mouse(false, 0); prev = down; tick(1 / 60); t += 1 / 60; }
+      DB.debug.mouse(false, 0); const hooked = F.state === 'fight';
+      if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard(); return hooked;
+    };
+    let armed = false;      // strike once, a beat after the run starts
+    const good = waitFor((t) => { if (ev.bite && !armed) armed = t; return armed && t - armed > 0.15 && t - armed < 0.25; }, 40);
+    check('a quick strike on the run hooks the fish', good && ev.nibble > 0, `hooked ${good}, nibbles before it ${ev.nibble}`);
+    const held = waitFor(() => true, 14);
+    check('holding the reel down the whole time never hooks', !held, `hooked ${held}`);
+    const early = waitFor(() => ev.nibble > 0 && !ev.early, 20);
+    check('striking at a nibble spooks the fish', !early && ev.early > 0, `hooked ${early}, early strikes ${ev.early || 0}`);
+    UI.dropCatches(UI.session.length);
 
     // --- helm: top speed, steering, staying upright, stopping, not driving through rock
     const key = (code, down) => DB.debug.key(code, down), start0 = { x: B.group.position.x, z: B.group.position.z };

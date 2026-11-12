@@ -93,7 +93,7 @@
 
   const Fishing = (DB.Fishing = {
     state: 'idle', tension: 0, dist: 0, power: 0, active: true, hint: '', zone: 'ok', fish: null, escaped: null, count: 0,
-    load: 0, yaw: 0, pitch: 0, crank: 0, over: 0, slack: 0, t: 0,
+    load: 0, yaw: 0, pitch: 0, crank: 0, over: 0, slack: 0, t: 0, nibble: 0, tease: null, holdT: 0, biteT: 0, popT: 0,
 
     init(scene, camera) {
       this.scene = scene; this.camera = camera;
@@ -268,33 +268,58 @@
           if (this.lurePos.y <= wy) {
             this.lurePos.y = wy; this.state = 'wait';
             DB.FX.splash(this.lurePos.x, wy, this.lurePos.z, 0.16); O.addRipple(this.lurePos.x, this.lurePos.z, 0.5); DB.emit('plop');
-            this.biteT = this.count === 0 ? 2.6 + Math.random() * 1.5 : 3 + Math.random() * 7; this.arched = false; this.nibble = 0; this.popT = 0;
+            this.biteT = this.count === 0 ? 2.6 + Math.random() * 1.5 : 3 + Math.random() * 7; this.arched = false; this.nibble = 0; this.popT = 0; this.tease = null; this.holdT = 0;
           }
           break;
         }
         case 'wait': {
           const dx = this.lurePos.x - this.tip.x, dz = this.lurePos.z - this.tip.z, d = Math.hypot(dx, dz) || 1;
           this.dist = d; pitchT = -0.2; yawT = M.clamp(M.wrapPi(Math.atan2(dx, dz) - Math.atan2(fwx, fwz)), -0.4, 0.4);
-          if (reelHeld) {       // work the lure back
-            cranking = 1; this.lurePos.x -= (dx / d) * 2.6 * dt; this.lurePos.z -= (dz / d) * 2.6 * dt; this.biteT -= dt * 0.6;
+          // lure action: short twitches draw fish in, a steady grind does not
+          if (reelHeld) {
+            cranking = 1; this.lurePos.x -= (dx / d) * 2.6 * dt; this.lurePos.z -= (dz / d) * 2.6 * dt; this.holdT += dt;
+            if (this.holdT < 0.7 && !this.tease) this.biteT -= dt * 0.8;
             this.popT -= dt; if (this.popT <= 0) { this.popT = 0.55 + Math.random() * 0.5; DB.FX.splash(this.lurePos.x, this.lurePos.y, this.lurePos.z, 0.05); O.addRipple(this.lurePos.x, this.lurePos.z, 0.25); }
-          }
-          this.lurePos.y = O.height(this.lurePos.x, this.lurePos.z) - 0.01;
-          this.biteT -= dt; this.nibble = Math.max(this.nibble - dt * 3, 0);
-          if (this.biteT < 2.2 && !this.arched) { this.arched = true; DB.Boat.Finder.addArch(2 + Math.random() * 5, 1.2); DB.emit('nibble'); this.nibble = 1; }
-          if (this.biteT < 0.9 && this.nibble < 0.1 && Math.random() < dt * 3) { this.nibble = 0.8; DB.emit('nibble'); }
-          loadT = 0.03 + this.nibble * 0.12; slackT = 0.4 - this.nibble * 0.3;
+          } else this.holdT = 0;
+          this.lurePos.y = O.height(this.lurePos.x, this.lurePos.z) - 0.01 - this.nibble * 0.12;
+          this.nibble = Math.max(this.nibble - dt * 2.5, 0);
           this.end.copy(this.lurePos); this.hint = 'wait';
-          if (d < 4.5) { this.state = 'idle'; this.lurePos.copy(this.tip).y -= 0.5; this.lurePrev.copy(this.lurePos); }
-          else if (this.biteT <= 0) { this.state = 'bite'; this.biteWin = 1.6; DB.FX.splash(this.lurePos.x, this.lurePos.y, this.lurePos.z, 0.45); O.addRipple(this.lurePos.x, this.lurePos.z, 1); DB.emit('bite'); }
+          if (d < 4.5) { this.state = 'idle'; this.tease = null; this.lurePos.copy(this.tip).y -= 0.5; this.lurePrev.copy(this.lurePos); break; }
+          if (!this.tease) {
+            this.biteT -= dt;
+            if (this.biteT <= 0) {      // a fish arrives: it mouths the lure a few times before it commits (or loses interest)
+              const first = this.count === 0;
+              this.tease = { n: first ? 2 : 2 + Math.floor(Math.random() * 4), t: 0.3, fake: !first && Math.random() < 0.3 };
+              DB.Boat.Finder.addArch(2 + Math.random() * 5, 1.2);
+            }
+          } else {
+            const tz = this.tease; this.hint = 'tease';
+            tz.t -= dt;
+            if (tz.t <= 0) {
+              if (tz.n > 0) {       // tap … tap
+                tz.n--; tz.t = 0.45 + Math.random() * 1.1; this.nibble = 0.6 + Math.random() * 0.4;
+                O.addRipple(this.lurePos.x, this.lurePos.z, 0.3); DB.emit('nibble');
+              } else if (tz.fake) {     // it swims off without taking it
+                this.tease = null; this.biteT = 3 + Math.random() * 5; DB.emit('lostInterest');
+              } else {
+                this.tease = null; this.state = 'bite'; this.biteWin = 0.65 + Math.random() * 0.35; this.strikeArmed = !reelHeld;
+                DB.FX.splash(this.lurePos.x, this.lurePos.y, this.lurePos.z, 0.45); O.addRipple(this.lurePos.x, this.lurePos.z, 1); DB.emit('bite');
+                break;
+              }
+            }
+            // striking at a nibble pulls the lure out of its mouth and spooks it
+            if (inp.mouseDown(0)) { this.tease = null; this.biteT = 6 + Math.random() * 6; this.nibble = 0; DB.emit('early'); }
+          }
+          loadT = 0.03 + this.nibble * 0.3; slackT = 0.4 - this.nibble * 0.35; pitchT -= this.nibble * 0.08;
           break;
         }
-        case 'bite': {
+        case 'bite': {     // the run: a fresh, quick strike sets the hook — holding the reel through it does not
           this.biteWin -= dt; loadT = 0.5 + 0.15 * Math.sin(this.t * 30); slackT = 0; pitchT = 0.05;
           this.lurePos.y = O.height(this.lurePos.x, this.lurePos.z) - 0.3;
           this.end.copy(this.lurePos); this.hint = 'bite';
-          if (inp.mouseDown(0) || reelHeld) this.hook();
-          else if (this.biteWin <= 0) { this.state = 'wait'; this.biteT = 4 + Math.random() * 6; this.arched = false; DB.emit('missed'); }
+          if (!reelHeld) this.strikeArmed = true;
+          if (inp.mouseDown(0) && this.strikeArmed) this.hook();
+          else if (this.biteWin <= 0) { this.state = 'wait'; this.biteT = 4 + Math.random() * 6; DB.emit('missed'); }
           break;
         }
         case 'fight': {

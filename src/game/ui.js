@@ -5,7 +5,8 @@
   const KEY = 'deepblue.log.v1';
   const set = (el, prop, v) => { if (el['_' + prop] !== v) { el['_' + prop] = v; if (prop === 'text') el.textContent = v; else if (prop === 'html') el.innerHTML = v; else el.style[prop] = v; } };
   const HINTS = {
-    bite: ['입질!', '좌클릭으로 챔질', '#ffe9a8'], run: ['질주!', '릴을 놓으세요 — 드랙이 버팁니다', '#ffb37a'], fight: ['버티는 중', '감으세요 · 텐션이 빨개지면 잠깐 놓기', '#e8f6ff'],
+    tease: ['톡… 톡…', '아직입니다 — 확 끌고 갈 때 챔질', '#cfe3ff'],
+    bite: ['입질!', '지금 좌클릭으로 챔질', '#ffe9a8'], run: ['질주!', '릴을 놓으세요 — 드랙이 버팁니다', '#ffb37a'], fight: ['버티는 중', '감으세요 · 텐션이 빨개지면 잠깐 놓기', '#e8f6ff'],
     jump: ['점프!', '감아서 텐션을 유지하세요 · 우클릭 줌', '#a8f0ff'], tired: ['지쳤습니다', '계속 감아 올리세요', '#c9ffd9'], high: ['텐션 과다!', '릴을 놓으세요 — 줄이 끊어집니다', '#ff8a7a'], low: ['줄이 느슨합니다', '감으세요 — 바늘이 빠집니다', '#ffd27a'],
   };
   const MODE = { boat: 'Boat Fishing', drive: 'At the Helm', dive: 'Undersea Spearfishing' };
@@ -72,13 +73,14 @@
       this.hintT += dt;
       let key = '';
       if (st === 'bite') key = 'bite';
+      else if (st === 'wait' && F.hint === 'tease') key = 'tease';
       else if (st === 'fight') { key = F.zone === 'high' ? 'high' : F.zone === 'low' && F.hint !== 'jump' && F.slack > 0.6 ? 'low' : F.hint; if (key === this.hintKey && key !== 'high' && key !== 'low' && this.hintT > 2.4) { $('hint').classList.remove('on'); key = null; } }
       if (key !== null) this.hint(key);
       let p = extraPrompt || '';
       if (!p && !this.cardOn) {
         if (st === 'idle') p = `<kbd>좌클릭</kbd>길게 눌러 캐스팅 &nbsp; <kbd>E</kbd>운전 &nbsp; ${canDive ? '<kbd>F</kbd>다이빙' : '<span style="opacity:.6">다이빙은 REEF 부표 근처에서</span>'}`;
         else if (st === 'charge') p = `캐스팅 파워 ${'▮'.repeat(Math.round(F.power * 10))}${'▯'.repeat(10 - Math.round(F.power * 10))}`;
-        else if (st === 'wait') p = '입질을 기다리는 중 — <kbd>좌클릭</kbd>누르면 릴링(루어 액션)';
+        else if (st === 'wait') p = '입질을 기다리는 중 — <kbd>좌클릭</kbd>을 짧게 끊어 치면 루어가 춤춥니다';
       }
       this.prompt(p);
     },
