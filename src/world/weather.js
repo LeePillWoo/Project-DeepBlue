@@ -25,6 +25,7 @@ void main(){
 
   const Weather = (DB.Weather = {
     k: 0, state: 'clear', t: 0, next: 300, dur: 180, rain: 0, flash: 0, flashT: 9, flashK: 0, strikeT: 6, applied: -1, auto: !DB.params.has('noweather'),
+    mist: 0,      // a local fog, set by whoever needs one (the ghost ship)
 
     init(scene) {
       this.scene = scene;
@@ -74,13 +75,13 @@ void main(){
 
     // push k into everything that depends on it
     apply() {
-      const k = this.k, O = DB.Ocean, E = DB.Env;
-      if (Math.abs(k - this.applied) > 0.004) {
-        this.applied = k; E.applyStorm(k); O.syncLight(); DB.Boat.syncLight();
-        if (k > 0 && k < 1) { E.dirty = true; E.cubeAge += 4; }      // while it changes, the sky reflections are redone every few seconds, not every 25
+      const k = this.k, O = DB.Ocean, E = DB.Env, sky = Math.max(k, this.mist * 0.62);      // a mist closes the sky in and dims the light like a storm two-thirds built, without the sea or the rain
+      if (Math.abs(sky - this.applied) > 0.004) {
+        this.applied = sky; E.applyStorm(sky); O.syncLight(); DB.Boat.syncLight();
+        if (sky > 0 && sky < 1) { E.dirty = true; E.cubeAge += 1.5; }      // while it changes, the sky reflections are redone every few seconds, not every 25
       }
       O.sea = 0.72 + 0.62 * k;
-      const U = O.uniforms; U.uFoamJ.value = 0.735 + 0.085 * k; U.uHaze.value = 5.5e-5 + 7.5e-4 * k; U.uRain.value = this.rain;
+      const U = O.uniforms; U.uFoamJ.value = 0.735 + 0.085 * k; U.uHaze.value = 5.5e-5 + 7.5e-4 * k + 9e-4 * this.mist; U.uRain.value = this.rain;
     },
 
     update(dt, camera, under, playing) {
@@ -106,7 +107,7 @@ void main(){
       this.apply();
       // --- rain and murk
       const fog = this.scene.fog, hz = DB.Env.horizonColor;
-      fog.density = under ? 1e-6 : 1e-6 + 0.0026 * k * k; fog.color.setRGB(hz.r * 0.9 + f * 0.22, hz.g * 0.9 + f * 0.25, hz.b * 0.9 + f * 0.32);
+      fog.density = under ? 1e-6 : 1e-6 + 0.0026 * k * k + 0.011 * this.mist; fog.color.setRGB(hz.r * 0.9 + f * 0.22, hz.g * 0.9 + f * 0.25, hz.b * 0.9 + f * 0.32);
       const rm = this.rainMesh, u = this.rainMat.uniforms;
       rm.visible = this.rain > 0.01 && !under;
       if (rm.visible) {

@@ -14,6 +14,7 @@
     ['nudibranch', '바위 위의 손가락만 한 파란 점 — 가까이에서 E'], ['orca', '무리가 가끔 지나갑니다 — 보트에서는 등지느러미와 물기둥을, 물속에서는 리프 바깥쪽을 보세요'],
     ['spermWhale', '가끔 깊은 쪽을 지나가는 거대한 그림자 — 보트에서는 물기둥'], ['humpback', '보트 가까이를 지나다 수면 위로 솟구칩니다'], ['blueWhale', '지구에서 가장 큰 동물. 가끔 지나갑니다 — 보트에서는 높은 물기둥'],
     ['whaleShark', '리프 위를 느릿느릿 도는 점박이 거인 — 다가가서 관찰'], ['manta', '리프 위를 날갯짓하며 활공합니다 — 다가가서 관찰'],
+    ['ghostShip', '안개와 함께 나타났다 사라집니다 — 폭풍이나 석양에 더 자주'], ['serpent', '아주 가끔, 먼바다에서 몸을 드러냅니다'], ['kraken', '닻을 내리고 있을 때 촉수가 보트를 에워쌉니다 — 조명탄으로 격퇴'],
     ['shark', '피 냄새를 맡고 다가옵니다 — 작살로 쫓아내기'], ['hammerhead', '난파선 주위를 떼 지어 돕니다 — 곁에 오래 머물면 한 마리가 덤벼듭니다'], ['greatWhite', '오래 잠수하거나 피를 많이 흘리면 나타납니다 — 작살 두 발'],
   ];
   const CHIP = { rod: '낚시', spear: '작살', hand: '채집', watch: '관찰' };
@@ -32,6 +33,7 @@
         const f = DB.Fish.get(key), m = new T.Mesh(f.geo, new T.MeshStandardMaterial({ map: f.tex, vertexColors: !!f.col, normalMap: f.nor || null, normalScale: new T.Vector2(1, -1), roughness: 0.5, metalness: 0, side: T.DoubleSide }));
         return m;
       }
+      if (sp.model) return sp.model();
       return DB.Dive.model ? DB.Dive.model(key) : null;
     },
 

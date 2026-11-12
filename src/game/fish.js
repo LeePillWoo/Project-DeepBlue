@@ -303,6 +303,12 @@
     crab: { name: '청게', en: 'Blue Crab', L: [0.22, 0.34], wK: 14, score: 260, hand: true },      // L = leg span
     nudibranch: { name: '갯민숭달팽이', en: 'Nudibranch', L: [0.07, 0.11], wK: 30, pts: 150, watch: true },
   });
+  // not animals, but they go in the field guide once seen (events.js shows them; `model` builds the portrait)
+  Object.assign(SP, {
+    ghostShip: { name: '유령선', en: 'Ghost Ship', L: [54, 54], wK: 0, pts: 1500, watch: true, model: () => DB.Events.portrait('ghost') },
+    serpent: { name: '바다뱀', en: 'Sea Serpent', L: [45, 45], wK: 0, pts: 2000, watch: true, model: () => DB.Events.portrait('serpent') },
+    kraken: { name: '크라켄', en: 'Kraken', L: [30, 30], wK: 0, pts: 1000, watch: true, model: () => DB.Events.portrait('kraken') },
+  });
   for (const k in SP) SP[k].key = k;
 
   function profAt(sp, u) {

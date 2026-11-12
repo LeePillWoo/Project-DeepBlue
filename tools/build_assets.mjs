@@ -268,6 +268,14 @@ async function buildModel(cfg) {
   for (const r of gl.scenes[gl.scene || 0].nodes) visit(r, pre, 0);
 
   if (cfg.unit) for (const p of parts) for (let i = 0; i < p.P.length; i++) p.P[i] *= cfg.unit;
+  if (cfg.crop) for (const p of parts) {      // keep only the triangles inside a box: [[x0, x1], [y0, y1], [z0, z1]], null = unbounded
+    const inside = (v) => cfg.crop.every((r, c) => !r || (p.P[v * 3 + c] >= r[0] && p.P[v * 3 + c] <= r[1])), map = new Map(), P = [], N = [], U = [], I = [];
+    for (let t = 0; t < p.I.length; t += 3) {
+      if (!inside(p.I[t]) || !inside(p.I[t + 1]) || !inside(p.I[t + 2])) continue;
+      for (let e = 0; e < 3; e++) { const v = p.I[t + e]; if (!map.has(v)) { map.set(v, P.length / 3); P.push(p.P[v * 3], p.P[v * 3 + 1], p.P[v * 3 + 2]); N.push(p.N[v * 3], p.N[v * 3 + 1], p.N[v * 3 + 2]); U.push(p.U[v * 2], p.U[v * 2 + 1]); } I.push(map.get(v)); }
+    }
+    p.P = Float64Array.from(P); p.N = Float64Array.from(N); p.U = Float64Array.from(U); p.I = Float64Array.from(I);
+  }
   if (cfg.fish) {     // principal axis = longest bbox axis → +x; axes/signs fix the orientation per model
     const mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
     for (const p of parts) for (let i = 0; i < p.P.length; i += 3) for (let c = 0; c < 3; c++) { mn[c] = Math.min(mn[c], p.P[i + c]); mx[c] = Math.max(mx[c], p.P[i + c]); }

@@ -27,6 +27,7 @@
     return _d.copy(w).addScaledVector(u, sc).addScaledVector(v, -tc).length();
   }
   const yawOf = (vx, vz) => Math.atan2(vx, vz) - Math.PI / 2;
+  DB.segDist = segDist;
 
   // distance from point p to segment ab
   function segPoint(a, b, p) {
@@ -272,10 +273,15 @@
       }
       // the pirates' chest, half sunk in the sand beside the wreck
       if (A.has('fab_chest')) {
-        const g = (this.chest = new T.Group()), mats = window.DBA.models.fab_chest.mats, x = R.wreck.x + 7.5, z = R.wreck.z - 6.5, y = W.height(x, z);
-        A.parts('fab_chest').forEach((p, i) => { const m = A.maps('fab_chest', p.mat), mesh = new T.Mesh(A.geo('fab_chest', i), UW.material({ map: m.map, normalMap: m.normalMap, normalFlip: -1, emis: /gold/i.test(mats[p.mat].name) ? 0.22 : 0.02 })); mesh.frustumCulled = false; g.add(mesh); });
-        g.position.set(x, y - 0.06, z); g.rotation.set(0.1, 2.2, -0.07); g.scale.setScalar(0.62); R.group.add(g);
+        const mats = window.DBA.models.fab_chest.mats, x = R.wreck.x + 7.5, z = R.wreck.z - 6.5, y = W.height(x, z);
+        const chest = (gold) => {
+          const g = new T.Group();
+          A.parts('fab_chest').forEach((p, i) => { const m = A.maps('fab_chest', p.mat), mesh = new T.Mesh(A.geo('fab_chest', i), UW.material({ map: m.map, normalMap: m.normalMap, normalFlip: -1, emis: /gold/i.test(mats[p.mat].name) ? gold : 0.02 })); mesh.frustumCulled = false; g.add(mesh); });
+          g.scale.setScalar(0.62); R.group.add(g); return g;
+        };
+        this.chest = chest(0.22); this.chest.position.set(x, y - 0.06, z); this.chest.rotation.set(0.1, 2.2, -0.07);
         this.chestPos = V3(x, y + 0.3, z);
+        this.digMesh = chest(0.35); this.digMesh.visible = false;      // the treasure map's chest: see setDig
       }
     },
     resetExtras() {
@@ -288,6 +294,13 @@
       for (const o of this.octos) { o.alive = true; o.mesh.visible = true; o.state = 'sit'; o.jets = 0; o.jet = 0; o.flush = 0; o.pos.copy(o.den); o.vel.set(0, 0, 0); }
       for (const t of this.meets) t.scare = 0;
       this.seen.clear(); this.chestOpen = false; this.pick = null; this.lock = null;
+    },
+    // the treasure map's chest lies buried here until it is dug up (events.js picks the place)
+    setDig(x, z) {
+      if (!this.digMesh) return;
+      const y = DB.World.height(x, z);
+      this.dig = { pos: V3(x, y + 0.2, z), done: false };
+      this.digMesh.position.set(x, y - 0.3, z); this.digMesh.rotation.set(0.25, Math.random() * 6.28, -0.15); this.digMesh.visible = true;
     },
 
     // what the spear would be pulled onto: the target nearest the crosshair, within the line's reach
@@ -343,6 +356,10 @@
     take(pk) {
       let rec;
       if (pk === 'chest') { this.chestOpen = true; rec = { key: 'treasure', L: 0.7, kg: DB.Species.treasure.wK * 0.343, method: 'hand' }; DB.FX.cloud(this.chestPos.x, this.chestPos.y, this.chestPos.z, 10, 0.75, 0.7, 0.6, 0.3, 2.5); }
+      else if (pk === 'dig') {      // hauled out of the sand
+        const d = this.dig; d.done = true; this.digMesh.position.y += 0.36; rec = { key: 'treasure', L: 1, kg: DB.Species.treasure.wK, method: 'hand', map: true };
+        DB.FX.cloud(d.pos.x, d.pos.y, d.pos.z, 16, 0.75, 0.7, 0.6, 0.45, 3.5); DB.Events.found();
+      }
       else if (pk.key === 'octopus') { pk.alive = false; pk.mesh.visible = false; rec = { key: 'octopus', L: pk.L, kg: pk.kg, method: 'hand' }; DB.FX.cloud(pk.pos.x, pk.pos.y + 0.1, pk.pos.z, 8, 0.012, 0.012, 0.02, 0.5, 5); }
       else if (pk.watch) { pk.seen = true; rec = { key: pk.key, L: pk.L, kg: DB.Species[pk.key].wK * pk.L * pk.L * pk.L, method: 'watch' }; }      // looked at, left where it is
       else {
@@ -427,7 +444,9 @@
       for (const it of this.items) if (it.alive && !it.seen) { const d = reach(it.pos, 0); if (d) { bd = d; pk = it; } }
       for (const o of this.octos) if (o.alive && o.state === 'sit') { const d = reach(o.pos, 0.1); if (d) { bd = d; pk = o; } }
       if (this.chest && !this.chestOpen) { const d = reach(this.chestPos, 0.15); if (d) { bd = d; pk = 'chest'; } }
-      this.pick = pk ? { name: DB.Species[pk === 'chest' ? 'treasure' : pk.key].name, verb: pk === 'chest' ? '열기' : pk.watch ? '관찰' : pk.key === 'octopus' || pk.key === 'crab' ? '잡기' : '채집' } : null;
+      if (this.dig && !this.dig.done) { const d = reach(this.dig.pos, 0.2); if (d) { bd = d; pk = 'dig'; } }
+      this.pick = !pk ? null : pk === 'dig' ? { name: '지도의 보물상자', verb: '파내기' }
+        : { name: DB.Species[pk === 'chest' ? 'treasure' : pk.key].name, verb: pk === 'chest' ? '열기' : pk.watch ? '관찰' : pk.key === 'octopus' || pk.key === 'crab' ? '잡기' : '채집' };
       if (pk && inp.pressed('KeyE') && this.blackout === 0) this.take(pk);
     },
 

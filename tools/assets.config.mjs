@@ -11,7 +11,7 @@
 //   unit   scale factor to metres            rot [x,y,z]   euler applied before packing
 //   fish   normalise to the game's creature space (+x snout, +y dorsal, length 1); axes/signs pick the source axes
 //   opaque ignore alpha blending in the source material     bleed   the atlas background is pure white: pad the painted islands over it
-//   grade {sat, bright}  tone a stylised colour texture down
+//   grade {sat, bright}  tone a stylised colour texture down     crop [[x0,x1],[y0,y1],[z0,z1]]  keep what is inside (metres, after unit)
 //   metal  use the metalness channel         paint   name of a vertex-colour painter in build_assets.mjs (untextured sculpts)
 const T2 = { diff: 1024, nor: 1024, orm: 512 }, T1 = { diff: 512, nor: 512, orm: 256 }, TS = { diff: 512, nor: 256, orm: 256 }, TB = { diff: 1024, nor: 512, orm: 256 };
 
@@ -64,6 +64,7 @@ export const MODELS = [
   { name: 'fab_seaslug', out: 'life', prep: 'sea_slug.glb', from: 'sea_slug_chromodoris_annae.glb', fish: true, axes: [1, 2, 0], signs: [1, 1, 1], merge: true, opaque: true, tex: TS },
   { name: 'fab_seadragon', out: 'life', prep: 'seadragon.glb', from: 'day67_weedy_seadragon.glb', fish: true, axes: [2, 1, 0], signs: [1, 1, 1], paint: 'seadragon' },
   { name: 'fab_humpback', out: 'life', prep: 'humpback.glb', from: 'free_stylized_whales.zip', fish: true, axes: [2, 1, 0], signs: [1, 1, 1], grade: { sat: 0.3, bright: 0.8 }, tex: T2 },
+  { name: 'fab_skeleton', out: 'life', prep: 'skeleton.glb', from: 'sm_human_skeleton.glb', unit: 0.78, crop: [[-0.45, 0.45], null, null], merge: true },      // the file also holds every bone laid out beside the assembled figure      // the ghost ship's crew (drawn in ghost light: no textures needed)
   // ---- sea: what you see from the deck
   { name: 'cliff_a', out: 'sea', glb: 'massive_nordic_coastal_cliff_vdssailfa_mid.glb', tex: { diff: 2048, nor: 1024, orm: 512 } },
   { name: 'cliff_b', out: 'sea', glb: 'huge_nordic_coastal_cliff_venrdcgga_mid.glb', tex: TB },

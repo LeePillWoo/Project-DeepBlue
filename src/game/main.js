@@ -48,7 +48,7 @@
     await step(0.5, '섬과 다른 배들 띄우는 중…', () => { DB.Sea.init(scene); DB.Boat.colliders = DB.Sea.colliders; DB.Crew.init(); DB.Weather.init(scene); });
     await step(0.58, '낚시 장비 준비 중…', () => { DB.Fishing.init(scene, camera); for (const k of ['marlin', 'sailfish', 'tuna', 'mahi', 'amberjack', 'seabream', 'grouper']) DB.Fish.get(k); });
     await step(0.68, '산호초와 난파선 배치 중…', () => DB.Reef.init(scene));
-    await step(0.8, '수중 생물 풀어놓는 중…', () => { DB.Dive.init(scene, camera); DB.Wild.init(scene); });
+    await step(0.8, '수중 생물 풀어놓는 중…', () => { DB.Dive.init(scene, camera); DB.Wild.init(scene); DB.Events.init(scene); });
     await step(0.87, '텍스처 디코딩 중…', () => DB.Assets.ready());
     await step(0.9, '도감 사진 촬영 중…', () => { DB.Dex.init(renderer); UI.stat(); });
     Input.init(canvas);
@@ -105,6 +105,7 @@
     const B = DB.Boat, F = DB.Fishing;
     if (G.trans || G.state !== 'boat' || on === G.drive) return;
     if (on) {
+      if (DB.Events.name === 'kraken') { UI.toast('촉수가 보트를 붙들고 있습니다 — 조명탄으로 쫓아내세요', 'warn'); return; }
       if (!stowRod()) { UI.toast('물고기와 싸우는 중에는 자리를 뜰 수 없습니다', 'warn'); return; }
       G.drive = true; F.setActive(false); B.setMode('drive'); DB.Crew.setPost('helm'); UI.setMode('drive'); DB.Audio.play('engineStart');
       G.dCam.yaw = 0; G.dCam.pitch = 0.15; G.dCam.h = B.heading; G.dCam.idle = 0;
@@ -118,6 +119,7 @@
     const F = DB.Fishing, B = DB.Boat;
     if (G.trans || G.state !== 'boat' || G.drive) return;
     if (B.mode !== 'anchor') { UI.toast('보트가 멈춘 뒤에 다이빙할 수 있습니다', 'warn'); return; }
+    if (DB.Events.name === 'kraken') { UI.toast('지금 물에 들어가는 건 좋은 생각이 아닙니다', 'warn'); return; }
     if (!DB.Sea.inReef(B.group.position.x, B.group.position.z)) { UI.toast('여기는 다이빙 포인트가 아닙니다 — 미니맵의 REEF(부표)로 보트를 몰고 가세요', 'warn', 4.5); return; }
     if (!stowRod()) return;
     const chase = F.escaped && G.chaseT > 0 ? F.escaped : null; F.escaped = null; G.chaseT = 0;
@@ -167,7 +169,7 @@
     on('catch', (rec) => {
       const info = UI.addCatch(rec), sp = SP[rec.key], pts = `+${info.pts.toLocaleString()}`;
       if (rec.method === 'watch') { A.play('discover'); UI.toast(`${sp.name} 관찰 — 도감에 기록했습니다 (${pts})`, 'good', 4.5); }
-      else if (rec.method === 'hand') { A.play(rec.key === 'treasure' ? 'treasure' : 'pickup'); UI.toast(rec.key === 'treasure' ? `해적의 보물상자를 열었습니다! (${pts})` : `${sp.name} ${rec.key === 'octopus' ? '포획' : '채집'}  ${rec.kg.toFixed(2)} kg (${pts})`, 'good', 3.6); }
+      else if (rec.method === 'hand') { A.play(rec.key === 'treasure' ? 'treasure' : 'pickup'); UI.toast(rec.map ? `지도의 보물을 파냈습니다! (${pts})` : rec.key === 'treasure' ? `해적의 보물상자를 열었습니다! (${pts})` : `${sp.name} ${rec.key === 'octopus' ? '포획' : '채집'}  ${rec.kg.toFixed(2)} kg (${pts})`, 'good', 3.6); }
       else {
         A.play(info.record ? 'record' : 'catch');
         if (rec.method === 'rod') { UI.showCard(rec, info); DB.Crew.cheer(7); DB.Sea.excite(14); }
@@ -193,6 +195,36 @@
     on('escaped', () => UI.toast('놓친 대어가 깊은 바다로 사라졌습니다', 'warn'));
     on('ink', () => A.play('ink'));
     on('protected', (key) => UI.toast(key === 'turtle' ? '바다거북은 보호종입니다 — 작살이 등딱지에 튕겨 나갔습니다' : `${eun(name(key))} 보호종입니다 — 작살을 거뒀습니다`, 'warn', 4));
+    // events at sea
+    on('event', (d) => {
+      const k = d.name + ':' + d.phase;
+      if (k === 'bottle:start') { A.play('discover'); UI.toast('물 위에 유리병이 떠다닙니다 — E 로 보트를 몰아 가까이 가 보세요 (미니맵의 "병")', '', 7); }
+      else if (k === 'bottle:got') { A.play('treasure'); UI.toast('병 속에 보물 지도가 들어 있습니다! 미니맵의 ✕ 지점으로 가서 다이빙하세요', 'good', 8); }
+      else if (k === 'bottle:lost') UI.toast('유리병이 파도에 떠내려갔습니다', '', 3);
+      else if (k === 'ghost:start') { A.play('ghost'); UI.toast('갑자기 안개가 끼고 공기가 차가워집니다…', 'warn', 6); }
+      else if (k === 'ghost:bell') { A.play('bell', { d: d.d * 0.5 }); A.play('creak', { d: d.d * 0.4 }); }
+      else if (k === 'serpent:start') UI.toast('먼바다가 끓어오릅니다 — 무언가 올라옵니다', 'warn', 5);
+      else if (k === 'serpent:roar') A.play('serpent', { d: d.d, delay: d.d / 340 });
+      // pirates
+      else if (k === 'raid:start') { A.play('horn', { d: 60 }); UI.toast('붉은 돛의 해적선이 쫓아옵니다! E 로 엔진을 켜고 달아나세요 — 320 m 이상 벌리면 포기합니다', 'bad', 8); }
+      else if (k === 'raid:fire') A.play('cannon', { d: d.d, delay: d.d / 340 });
+      else if (k === 'raid:fall') {
+        const m = d.miss; A.play('splash', { s: M.clamp(1.6 - m / 40, 0.2, 1.5), delay: Math.min(m / 340, 0.3) });
+        if (m < 4.5) { G.shake = 1.3; G.wet = 1; G.damage = 0.7; A.play('bump'); UI.bonus(-300); UI.toast('피격! 포탄이 선체를 스쳤습니다 (−300점)', 'bad', 3.5); }
+        else if (m < 16) { G.shake = Math.max(G.shake, 0.6); G.wet = Math.max(G.wet, 0.6); UI.toast('포탄이 바로 옆에 떨어졌습니다!', 'warn', 2); }
+      }
+      else if (k === 'raid:escaped') { const pts = d.hits ? 800 : 1500; A.play('record'); UI.bonus(pts); UI.toast(`해적선을 따돌렸습니다! (+${pts.toLocaleString()}점${d.hits ? '' : ' · 무피격'})`, 'good', 6); }
+      else if (k === 'raid:gaveup') { UI.bonus(500); UI.toast('해적선이 추격을 포기하고 돌아섭니다 (+500점)', 'good', 5); }
+      // the kraken
+      else if (k === 'kraken:start') { A.play('kraken'); UI.cross(true); UI.toast('보트 밑으로 거대한 그림자가 지나갑니다… 조명탄 권총을 꺼냈습니다 (좌클릭 발사)', 'bad', 7); }
+      else if (k === 'kraken:windup') A.play('kraken');
+      else if (k === 'kraken:fire') A.play('flare');
+      else if (k === 'kraken:burn') { A.play('hit'); UI.toast(d.left ? `촉수가 불에 데어 가라앉습니다 — 남은 촉수 ${d.left}` : '마지막 촉수까지 쫓아냈습니다!', 'good', 2.5); }
+      else if (k === 'kraken:slam') { G.shake = 1.4; G.wet = 1; G.damage = 0.6; A.play('slam', { s: 1.3 }); A.play('splash', { s: 1.2 }); UI.bonus(-200); UI.toast(`촉수가 보트를 내리쳤습니다! (${d.hits}/5 · −200점)`, 'bad', 3); }
+      else if (k === 'kraken:beaten') { const pts = 2500 - d.hits * 300; A.play('record'); UI.bonus(pts); UI.toast(`크라켄을 물리쳤습니다! (+${pts.toLocaleString()}점)`, 'good', 7); }
+      else if (k === 'kraken:robbed') { UI.bonus(-1000); UI.toast('보트가 버티지 못했습니다 — 크라켄이 전리품을 쓸어 가며 가라앉습니다 (−1,000점)', 'bad', 7); }
+      else if (k === 'kraken:end') { UI.cross(G.state === 'dive'); if (G.state === 'boat' && !G.drive) DB.Fishing.setActive(true); }
+    });
     // weather
     on('weather', (s) => {
       if (s === 'build') UI.toast('수평선에서 먹구름이 몰려옵니다 — 폭풍이 다가옵니다', 'warn', 6);
@@ -220,6 +252,16 @@
     on('anchor', () => { if (G.state === 'boat') { A.play('anchor'); UI.toast(DB.Sea.inReef(DB.Boat.group.position.x, DB.Boat.group.position.z) ? '닻을 내렸습니다 — 다이빙 포인트입니다 (F)' : '닻을 내렸습니다', '', 3); } });
     on('landmark', (text) => { A.play('discover'); UI.toast(text, 'good', 6); });
     on('freeMouse', () => UI.toast('이 화면은 마우스 고정을 지원하지 않아 커서로 조작합니다 — 좌우 끝에 커서를 두면 계속 돌고, Esc 로 일시정지', '', 7));
+  }
+
+  // what the events need to know about the moment (calm = no fish on the line, so nothing else is asking for attention)
+  const _ev = {};
+  function evCtx() {
+    const F = DB.Fishing;
+    _ev.camera = camera; _ev.boat = DB.Boat; _ev.under = G.under; _ev.drive = G.drive;
+    _ev.inp = (Input.locked || G.noLock) && G.state === 'boat' && !G.trans ? Input : NOINPUT;
+    _ev.playing = (G.state === 'boat' || G.state === 'dive') && !G.trans; _ev.calm = F.state === 'idle' || F.state === 'wait' || F.state === 'charge' || F.state === 'cast';
+    return _ev;
   }
 
   // chase camera for the helm: orbits with the mouse, swings back astern when left alone, never dips into a wave
@@ -318,6 +360,7 @@
     }
     camera.updateMatrixWorld();
     DB.Wild.update(dt, camera, G.under, (G.state === 'boat' || G.state === 'dive') && !G.trans);
+    DB.Events.update(dt, evCtx());
     if (G.state === 'boat') F.update(dt, G.trans || G.drive || G.dK > 0 ? NOINPUT : Input, look);
     if (G.state === 'dive') D.update(dt, G.trans ? NOINPUT : Input, look);
     DB.FX.update(dt, camera, G.under);
@@ -347,12 +390,13 @@
     const bp = B.group.position;
     if (G.state === 'boat') {
       if (G.drive) UI.drive(B, B.air > 0.25 ? '점프!' : '');
-      else UI.fishing(F, dt, G.chaseT > 0 && F.escaped ? `<kbd>F</kbd>다이빙해서 놓친 대어 추적! (${Math.ceil(G.chaseT)}초)` : B.mode === 'coast' ? '닻을 내리는 중…' : '', DB.Sea.inReef(bp.x, bp.z));
+      else UI.fishing(F, dt, DB.Events.name === 'kraken' ? '<kbd>좌클릭</kbd>조명탄 발사 — 몸을 젖히는 촉수를 내려치기 전에 맞히세요' : G.chaseT > 0 && F.escaped ? `<kbd>F</kbd>다이빙해서 놓친 대어 추적! (${Math.ceil(G.chaseT)}초)` : B.mode === 'coast' ? '닻을 내리는 중…' : '', DB.Sea.inReef(bp.x, bp.z));
       UI.map({ mode: G.drive ? 'drive' : 'boat', cx: bp.x, cz: bp.z, rot: G.dK > 0.5 ? G.dCam.h + G.dCam.yaw : B.heading + look.yaw, range: G.dK > 0.5 ? 320 : 160, dt });
     } else if (G.state === 'dive') {
       UI.dive(D, camera, innerWidth, innerHeight);
       UI.map({ mode: 'dive', cx: D.pos.x, cz: D.pos.z, rot: look.yaw, range: 60, dt });
     }
+    UI.eventPin(G.state === 'boat' || G.state === 'dive' ? DB.Events.pin : null, camera, innerWidth, innerHeight);
     // audio
     const f = F.fish, boat = G.state === 'boat', buoy = B.buoy ? Math.hypot(B.buoy.position.x - bp.x, B.buoy.position.z - bp.z) : 1e9, Sea = DB.Sea;
     const dOf = (id) => { const p = Sea.pois.find((q) => q.id === id); return p && p.boat ? Math.hypot(p.boat.x - bp.x, p.boat.z - bp.z) : 1e9; };
@@ -404,7 +448,8 @@
     // put the boat somewhere (anchored), optionally with a heading
     tp(x, z, h) { const B = DB.Boat; B.group.position.x = x; B.group.position.z = z; if (h !== undefined) B.heading = h; B.u = B.vs = B.yawRate = 0; if (B.mode !== 'drive') B.dropAnchor(); G.dCam.h = B.heading; },
     dex() { return DB.Dex.toggle(); },
-    storm(k = 1) { DB.Weather.set(k); return DB.Weather.state; },      // weather straight to a strength: 1 = full storm, 0 = clear
+    storm(k = 1) { DB.Weather.set(k); return DB.Weather.state; },
+    event(name) { return DB.Events.start(name, evCtx()); },      // 'bottle' | 'ghost' | 'serpent' … right now      // weather straight to a strength: 1 = full storm, 0 = clear
     wild(key) { return !!DB.Wild.start(key, camera, G.under); },      // send the orcas ('orca') or the sperm whale ('spermWhale') past right now
     hook(key) { const F = DB.Fishing; if (F.state === 'idle') { F.lurePos.copy(F.tip).add(v1.set(-28, 0, 34)); F.lurePos.y = 0; } F.hook(key); },
     step(n, dt = 1 / 60) { for (let i = 0; i < n; i++) tick(dt); },
@@ -413,7 +458,7 @@
 
   // ?selftest — the cast, the bite, the fight and the rod work, the spear, the boat under power, the animals, a storm, every sound
   async function selftest() {
-    DB.Weather.auto = false;      // fair weather for the checks: the storm has its own, below
+    DB.Weather.auto = false; DB.Events.auto = false;      // fair weather and a quiet sea for the checks: the storm and the events have their own, below
     const F = DB.Fishing, B = DB.Boat, D = DB.Dive, res = [], check = (name, ok, info) => { res.push({ name, ok, info }); console.log(`[selftest] ${ok ? 'PASS' : 'FAIL'} ${name} — ${info}`); };
     const fight = (policy, maxT, setup) => {
       if (F.fish) F.endFight('lost'); F.state = 'idle'; UI.hideCard();
@@ -591,6 +636,61 @@
     // --- every sound renders (peak level only: nobody is listening)
     const pr = await DB.Audio.probe(), dead = pr.filter((p) => !p.ok);
     check(`all ${pr.length} sounds render non-silent`, pr.length > 30 && !dead.length, dead.length ? 'broken: ' + dead.map((p) => `${p.name}(${p.err || p.peak})`).join(', ') : `quietest ${pr.reduce((m, p) => (p.peak < m.peak ? p : m)).name}`);
+    // --- events at sea. The pirates: they open fire, the shot falls near an anchored boat, and running for it shakes them off
+    {
+      const E = DB.Events, evs = []; DB.on('event', (d) => evs.push(d));
+      const count = (name, phase) => evs.filter((d) => d.name === name && d.phase === phase).length;
+      DB.debug.tp(0, 0, 0); for (let i = 0; i < 60; i++) tick(1 / 60);
+      const score0 = UI.log.score;
+      DB.debug.event('raid');
+      const rd = E.cur.ship; rd.x = B.group.position.x - 130; rd.z = B.group.position.z + 130;      // astern to the south-west; open water lies to the north-east
+      for (let i = 0; i < 60 * 40; i++) tick(1 / 60);
+      const falls = evs.filter((d) => d.name === 'raid' && d.phase === 'fall').map((d) => d.miss).sort((a, b) => a - b), dRaid = Math.hypot(rd.x - B.group.position.x, rd.z - B.group.position.z);
+      DB.debug.tp(B.group.position.x, B.group.position.z, Math.atan2(-1, 1)); setDrive(true); key('KeyW', true);
+      let tEsc = 0; while (E.name === 'raid' && !count('raid', 'escaped') && tEsc < 120) { tick(1 / 60); tEsc += 1 / 60; }
+      key('KeyW', false); setDrive(false); if (E.cur) E.stop();
+      check('pirates: open fire, hold their range, and are outrun', falls.length >= 6 && falls[Math.floor(falls.length / 2)] < 30 && dRaid > 30 && count('raid', 'escaped') === 1,
+        `${falls.length} rounds in 40 s at anchor (median miss ${falls.length ? falls[Math.floor(falls.length / 2)].toFixed(0) : '-'} m), she stood off at ${dRaid.toFixed(0)} m, shaken off after ${tEsc.toFixed(0)} s`);
+      let ta = 0; while (B.mode !== 'anchor' && ta < 60) { tick(1 / 60); ta += 1 / 60; }
+      // the kraken: left alone it beats on the boat; a flare into each arm drives it off
+      DB.debug.tp(0, 0, 0); for (let i = 0; i < 60; i++) tick(1 / 60);
+      DB.debug.event('kraken'); const kr = E.cur;
+      for (let i = 0; i < 60 * 16; i++) tick(1 / 60);
+      const slams = count('kraken', 'slam'); let tk = 0;
+      while (E.name === 'kraken' && !kr.over && tk < 60) {
+        const arm = kr.arms.find((a) => a.st !== 'gone' && a.st !== 'sink' && a.st !== 'wait');
+        if (arm && !kr.flare.live && kr.reload <= 0) {
+          B.eyeWorld(v1); kr.armPoint(arm, 0.4, v2); DB.debug.view = { p: v1.toArray(), t: v2.toArray() };
+          tick(1 / 60); DB.debug.mouse(true, 0); tick(1 / 60); DB.debug.mouse(false, 0); tk += 2 / 60;
+        } else { tick(1 / 60); tk += 1 / 60; }
+      }
+      DB.debug.view = null; const beaten = count('kraken', 'beaten');
+      for (let i = 0; i < 60 * 4; i++) tick(1 / 60);
+      check('kraken: beats on the boat until flares drive it off', slams >= 1 && beaten === 1 && E.name === '' && F.active, `${slams} blows in 16 s unanswered, then six arms burnt in ${tk.toFixed(0)} s; rod back in hand ${F.active}`);
+      // ghost ship and serpent run their course and are logged when looked at
+      const seen = []; DB.on('catch', (r) => { if (r.method === 'watch') seen.push(r.key); });
+      for (const name of ['ghost', 'serpent']) {
+        DB.debug.event(name);
+        for (let i = 0; i < 60 * 80 && E.name === name; i++) { const o = E.cur.obj.position; DB.debug.view = { p: [B.group.position.x, 2.5, B.group.position.z], t: [o.x, 6, o.z] }; tick(1 / 60); }
+        DB.debug.view = null;
+      }
+      check('ghost ship and sea serpent pass and enter the field guide', seen.includes('ghostShip') && seen.includes('serpent') && E.name === '' && DB.Weather.mist === 0, `logged ${seen.join(', ') || 'nothing'}; mist back to ${DB.Weather.mist}`);
+      for (let i = 0; i < 120; i++) tick(1 / 60);
+      // the bottle: come alongside for the map, then dig the chest up where it says
+      DB.debug.event('bottle'); const bt = E.cur;
+      DB.debug.tp(bt.x - 3, bt.z - 3, 0); for (let i = 0; i < 30; i++) tick(1 / 60);
+      const map = E.map && { x: E.map.x, z: E.map.z };
+      let dug = null; DB.on('catch', (r) => { if (r.map) dug = r; });
+      if (map) {
+        DB.debug.tp(0, 0, 0); for (let i = 0; i < 60; i++) tick(1 / 60);
+        enterWater(null); tick(1 / 60);
+        for (let i = 0; i < 20; i++) { D.pos.copy(D.dig.pos); D.pos.y += 1.1; D.vel.set(0, 0, 0); G.look.pitch = -1.4; if (i === 10) key('KeyE', true); tick(1 / 60); key('KeyE', false); }
+        leaveWater('board');
+      }
+      check('treasure map: the bottle gives a place, the chest is dug up there', !!map && !!dug && dug.key === 'treasure' && !E.map, map ? `map at ${map.x.toFixed(0)}, ${map.z.toFixed(0)}; dug ${dug ? 'yes' : 'no'}` : 'no map');
+      UI.dropCatches(UI.session.length); UI.bonus(score0 - UI.log.score);      // leave the player's score as it was
+      DB.Events.auto = !P.has('noevents');
+    }
     DB.Weather.auto = !P.has('noweather');
     DB.selftestResult = res;
   }

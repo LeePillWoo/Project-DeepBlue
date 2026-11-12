@@ -56,6 +56,7 @@
   @keyframes blink { to { opacity: 0.45; } }
   .mk { position: absolute; left: 0; top: 0; font: 12px 'Malgun Gothic', sans-serif; letter-spacing: 0.6px; padding: 3px 9px; display: none; white-space: nowrap; border-color: var(--hl); color: #d5fffb; }
   #boatMk { border-color: rgba(255, 255, 255, 0.6); color: #fff; }
+  #evMk { border-color: #ffd24a; color: #ffe9a8; }
   #card { position: absolute; right: 6%; top: 50%; transform: translateY(-50%); width: 330px; padding: 20px 24px 18px; display: none; animation: tin 0.35s ease-out; }
   #card .sp { font: 700 34px 'Malgun Gothic', sans-serif; letter-spacing: 1px; }
   #card .en { font-size: 12px; letter-spacing: 3.2px; text-transform: uppercase; color: var(--hl); margin: 2px 0 14px; }
@@ -135,6 +136,7 @@
   <div id="alert" class="glass">⚠ 상어 접근</div>
   <div id="marker" class="glass mk"></div>
   <div id="boatMk" class="glass mk"></div>
+  <div id="evMk" class="glass mk"></div>
   <div id="toasts"></div>
   <div id="card" class="glass">
     <div class="sp" id="cName"></div><div class="en" id="cEn"></div>
@@ -167,7 +169,7 @@
       <kbd>좌클릭</kbd>작살 &nbsp;<kbd>우클릭</kbd>조준 &nbsp;<kbd>E</kbd>채집 &nbsp;<kbd>L</kbd>라이트<br>
       <kbd>F</kbd>보트로 복귀 (어디서든) &nbsp;<kbd>Tab</kbd>도감</div>
   </div>
-  <div class="foot">Chrome · WebGL2 · F11 전체 화면 권장 &nbsp;|&nbsp; 에셋: Quixel Megascans (Fab) · Poly Haven (CC0) · CC-BY — Dom Baker, Tony Flanagan, Charlie catling, Romain Ferre, DylanHayes, UPWARD, GG Beta Pie, Forge of Fantasy, GoldenZtuff, Optic Idealist, JuanG3D, LapaModels (목록: CREDITS.md) &nbsp;|&nbsp; <span id="qInfo"></span></div>
+  <div class="foot">Chrome · WebGL2 · F11 전체 화면 권장 &nbsp;|&nbsp; 에셋: Quixel Megascans (Fab) · Poly Haven (CC0) · CC-BY — Dom Baker, Tony Flanagan, Charlie catling, Romain Ferre, DylanHayes, UPWARD, GG Beta Pie, Forge of Fantasy, GoldenZtuff, Optic Idealist, JuanG3D, LapaModels, Salt Lake Manor (목록: CREDITS.md) &nbsp;|&nbsp; <span id="qInfo"></span></div>
 </div>
 
 <div id="pause"><h2>일시정지</h2><p>화면을 클릭하면 계속합니다</p></div>
@@ -189,6 +191,7 @@
 <script src="src/world/reef.js"></script>
 <script src="src/game/dive.js"></script>
 <script src="src/game/wild.js"></script>
+<script src="src/game/events.js"></script>
 <script src="src/world/sea.js"></script>
 <script src="src/world/weather.js"></script>
 <script src="src/game/crew.js"></script>

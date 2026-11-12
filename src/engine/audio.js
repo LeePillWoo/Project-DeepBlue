@@ -89,6 +89,12 @@
       noise(S, { f: 260, f2: 55, a: 0.04, d: 3.2 + d / 400, g: 0.75 * k + 0.12, delay: dl + 0.03 }); noise(S, { f: 95, f2: 40, a: 0.3, d: 5, g: 0.5 * k + 0.1, delay: dl + 0.6 });
       tone(S, { f: 52, f2: 30, d: 1.6, g: 0.5 * k, delay: dl }); noise(U, { f: 120, f2: 45, a: 0.1, d: 3.5, g: 0.35 * k + 0.05, delay: dl });
     },
+    // the events (events.js)
+    ghost: (S) => { for (const [f, dl] of [[110, 0], [164.8, 0.5], [130.8, 1.4], [98, 2.4]]) { tone(S, { f, f2: f * 0.985, a: 1.2, d: 4.5, g: 0.09, delay: dl }); tone(S, { f: f * 2.01, a: 1.5, d: 3.5, g: 0.03, delay: dl }); } noise(S, { type: 'bandpass', f: 500, f2: 900, q: 6, a: 1.5, d: 4, g: 0.05 }); },
+    serpent: (S, U, X, o) => { const k = near(o.d || 150, 260) + 0.2; voice(S, { f: 62, f2: 38, band: 240, q: 2, a: 0.3, d: 2.6, g: 0.5 * k, delay: o.delay, vib: 5 }); noise(S, { f: 300, f2: 90, a: 0.2, d: 2.4, g: 0.25 * k, delay: o.delay }); },
+    cannon: (S, U, X, o) => { const k = near(o.d || 100, 220) + 0.15, dl = o.delay; tone(S, { f: 70, f2: 28, d: 0.9, g: 0.9 * k, delay: dl }); noise(S, { f: 900, f2: 120, a: 0.004, d: 1.1, g: 0.6 * k, delay: dl }); noise(S, { f: 200, f2: 60, a: 0.2, d: 2.2, g: 0.25 * k, delay: dl + 0.3 }); },
+    kraken: (S) => { voice(S, { f: 85, f2: 50, band: 300, q: 3, a: 0.4, d: 1.8, g: 0.35, vib: 3 }); noise(S, { f: 1500, f2: 300, a: 0.1, d: 1.6, g: 0.2 }); },
+    flare: (S) => { noise(S, { type: 'bandpass', f: 1800, f2: 4200, q: 1.5, a: 0.005, d: 0.5, g: 0.35 }); tone(S, { f: 600, f2: 1400, d: 0.35, g: 0.12 }); },
     whale: (S, U) => { const f = 150 + Math.random() * 90; tone(U, { f, f2: f * 1.9, a: 0.6, d: 1.6, g: 0.05 }); tone(U, { f: f * 1.9, f2: f * 1.25, a: 0.3, d: 1.8, g: 0.045, delay: 1.9 }); },
     dexOpen: (S, U, X) => { tone(X, { f: 660, d: 0.08, g: 0.09 }); tone(X, { f: 990, d: 0.1, g: 0.08, delay: 0.07 }); },
     dexClose: (S, U, X) => { tone(X, { f: 990, d: 0.08, g: 0.08 }); tone(X, { f: 660, d: 0.1, g: 0.08, delay: 0.07 }); },

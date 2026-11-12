@@ -40,7 +40,7 @@
       $('driveHud').style.display = mode === 'drive' ? 'block' : 'none';
       $('cross').style.display = mode === 'dive' ? 'block' : 'none';
       if (mode !== 'boat') $('fishHud').style.display = 'none';
-      if (mode !== 'dive') { for (const id of ['alert', 'marker', 'boatMk', 'lockLab']) $(id).style.display = 'none'; }
+      if (mode !== 'dive') { for (const id of ['alert', 'marker', 'boatMk', 'lockLab']) set($(id), 'display', 'none'); }
       this.hint(''); this.prompt(''); this.mapT = 0;
     },
     pause(on) { $('pause').style.display = on ? 'flex' : 'none'; },
@@ -115,13 +115,7 @@
       const ll = $('lockLab');
       if (D.lock && D.loaded) { set(ll, 'text', `${D.lock.name} · ${D.lock.dist.toFixed(1)} m`); set(ll, 'display', 'block'); } else set(ll, 'display', 'none');
       set($('alert'), 'display', D.sharkNear > 0 ? 'block' : 'none');
-      const pin = (mk, pos, text) => {      // label pinned to a world position, clamped to the screen edge when it is out of view
-        const v = this._v.copy(pos).project(camera), behind = v.z > 1;
-        let x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
-        if (behind) { x = w - x; y = h; }
-        x = M.clamp(x, 90, w - 290); y = M.clamp(y, 104, h - 150);      // clear of the mode label (top) and the prompt (bottom)
-        mk.style.display = 'block'; mk.style.transform = `translate(${Math.round(x - 60)}px, ${Math.round(y - 34)}px)`; set(mk, 'text', text);
-      };
+      const pin = (mk, pos, text) => this.pinMark(mk, pos, text, camera, w, h);
       if (D.marker && D.marker.alive) pin($('marker'), D.marker.pos, `◆ 도주 중인 ${D.marker.sp.name}  ${D.marker.pos.distanceTo(D.pos).toFixed(0)} m`);
       else set($('marker'), 'display', 'none');
       // where the boat is — the thing you could not find before
@@ -136,6 +130,17 @@
       else p = `<kbd>F</kbd>보트로 복귀${D.bag.length ? ` (어획 ${D.bag.length})` : ''}`;
       this.prompt(p);
     },
+
+    // label pinned to a world position, clamped to the screen edge when it is out of view
+    pinMark(mk, pos, text, camera, w, h) {
+      const v = this._v.copy(pos).project(camera), behind = v.z > 1;
+      let x = (v.x * 0.5 + 0.5) * w, y = (-v.y * 0.5 + 0.5) * h;
+      if (behind) { x = w - x; y = h; }
+      x = M.clamp(x, 90, w - 290); y = M.clamp(y, 104, h - 150);      // clear of the mode label (top) and the prompt (bottom)
+      set(mk, 'display', 'block'); mk.style.transform = `translate(${Math.round(x - 60)}px, ${Math.round(y - 34)}px)`; set(mk, 'text', text);
+    },
+    // the one label an event may show: a drifting bottle, the spot on the treasure map … (pin = { pos, text } or null)
+    eventPin(pin, camera, w, h) { if (pin) this.pinMark($('evMk'), pin.pos, pin.text, camera, w, h); else set($('evMk'), 'display', 'none'); },
 
     // minimap. st: { mode, cx, cz (centre, world), rot (direction that points up: heading / view yaw), range (m), dt }
     map(st) {
@@ -174,6 +179,14 @@
         else if (poi.boat) { const b = poi.boat, out = arrow(b.x, b.z, b.h, poi.id === 'ship' ? 15 : 10, poi.id === 'ship' ? '#1d1d22' : '#c8d2dc', poi.id === 'ship'); if (poi.id === 'ship' && (out || st.range > 150)) { to(b.x, b.z, p); rim(p); label(poi.label, '#ddd'); } }
       }
       if (B.buoy) dot(B.buoy.position.x, B.buoy.position.z, 5, '#ff5a3a');
+      // whatever the events have out there: a bottle, the cross on the treasure map, something chasing you
+      for (const m of DB.Events.marks) {
+        if (m.h !== undefined) { arrow(m.x, m.z, m.h, 14, m.col, true); to(m.x, m.z, p); rim(p); label(m.label, m.col); continue; }
+        to(m.x, m.z, p); rim(p, 14);
+        if (m.cross) { c.strokeStyle = m.col; c.lineWidth = 4; c.beginPath(); c.moveTo(p[0] - 8, p[1] - 8); c.lineTo(p[0] + 8, p[1] + 8); c.moveTo(p[0] + 8, p[1] - 8); c.lineTo(p[0] - 8, p[1] + 8); c.stroke(); }
+        else { c.fillStyle = m.col; c.beginPath(); c.arc(p[0], p[1], 6, 0, 7); c.fill(); }
+        label(m.label, m.col);
+      }
       if (st.mode === 'dive') {
         const wk = DB.Reef.wreck; to(wk.x, wk.z, p); c.strokeStyle = '#d8b27a'; c.lineWidth = 4; c.beginPath(); c.moveTo(p[0] - 9, p[1] - 9); c.lineTo(p[0] + 9, p[1] + 9); c.moveTo(p[0] + 9, p[1] - 9); c.lineTo(p[0] - 9, p[1] + 9); c.stroke(); label('난파선', '#e8cfa0');
         for (const sh of D.sharks) if (sh.state === 'approach' || sh.state === 'charge') dot(sh.pos.x, sh.pos.z, 7, '#ff4a3a');
@@ -213,6 +226,9 @@
       this.stat(); this.save();
       return { pts, record: record || first, first };
     },
+    // points won or lost outside the catch log (outrunning pirates, a kraken's blows)
+    bonus(pts) { this.log.score = Math.max(this.log.score + pts, 0); this.stat(); this.save(); },
+    cross(on) { $('cross').style.display = on ? 'block' : 'none'; },      // the aiming ring, for the flare pistol on deck
     // undo the last n catches (bag lost on blackout / stolen by a shark)
     dropCatches(n) {
       for (let i = 0; i < n; i++) {
